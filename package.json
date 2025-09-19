@@ -1,6 +1,6 @@
 {
   "name": "raw_lib",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "RawLib — RawQL engine, adapters and validation module",
   "license": "MIT",
   "author": "Raunak pndey",
@@ -17,9 +17,8 @@
     "clean": "rm -rf dist",
     "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --clean --sourcemap",
     "build:watch": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --clean --sourcemap --watch",
-    "test": "jest",
     "prepare": "npm run build",
-    "prepublishOnly": "npm test"
+    "publish": "npm publish --access public"
   },
   "dependencies": {
     "mongoose": "^8.18.0",
