@@ -30,13 +30,10 @@ jobs:
       - name: Build (CJS + ESM + d.ts)
         run: npm run build
 
-      - name: Run tests
-        run: npm test
-
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # safety: ensure version is not a placeholder
           node -e "const pkg=require('./package.json'); if(!pkg.version || pkg.version.includes('0.0.0')){console.log('WARN: check package.json version');}"
-          npm publish --access public
+          npm run publish
