@@ -216,9 +216,11 @@ export default class MongoAdapter
     if (request.options?.limit) query.limit(request.options.limit);
     if (request.options?.page) query.skip(skip);
     if (request.options?.select) query.select(request.options.select.join(" "));
+    if (request.options?.sort)
+      query.sort(this.convertSort(request.options.sort));
 
     const items = await query.lean().exec();
-    const totalItems = await query.countDocuments(filter).exec();
+    const totalItems = await model.countDocuments(filter).exec();
 
     const responseData = {
       type: "paginated",

@@ -1,11 +1,11 @@
 {
   "name": "raw_lib",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "RawLib — RawQL engine, adapters and validation module",
   "license": "MIT",
   "author": "Raunak pndey",
   "type": "module",
-  "main": "dist/index.cjs.js",
+  "main": "dist/index.cjs",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -38,6 +38,7 @@
     "rawql",
     "rawlib",
     "clean-architecture",
-    "validation"
+    "validation",
+    "graphql"
   ]
 }
