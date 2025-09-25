@@ -44,7 +44,7 @@ export type RawQlFilter =
 
 export type RawQlOptions = {
   sort?: { field: string; direction: "asc" | "desc" }[];
-  limit: number | 10;
+  limit?: number | 10;
   skip?: number;
   page?: number | 1;
   select?: string[];

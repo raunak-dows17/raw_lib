@@ -74,6 +74,8 @@ export default class RawQlEngine {
     } catch (error: any) {
       const validationDetails =
         error && error.validation ? error.validation : null;
+
+      console.log("Validation", error.message);
       return {
         status: false,
         message: error.message || "RawQl Engine Execution Error",
@@ -118,7 +120,7 @@ export default class RawQlEngine {
   // ------------------
 
   private validate(req: RawQlRequest) {
-    if (!req.entity || typeof req.entity !== "string") {
+    if (!req.entity) {
       throw new Error("`entity` (string) is required");
     }
     if (!req.type) {
@@ -126,10 +128,8 @@ export default class RawQlEngine {
     }
 
     switch (req.type) {
-      case "get":
-      case "update":
       case "delete":
-        if (!req.id || typeof req.id !== "string") {
+        if (!req.id) {
           throw new Error(`\`${req.type}\` requires a string \`id\``);
         }
         break;

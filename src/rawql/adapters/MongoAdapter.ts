@@ -21,7 +21,7 @@ import {
 } from "../config/types/rawql_response";
 
 export default class MongoAdapter
-  implements RawQlAdapter, RawQlAdapterOperations {
+  implements RawQlAdapter, Partial<RawQlAdapterOperations> {
   private models: Map<String, Model<any>> = new Map();
 
   constructor(uri: string) {
@@ -238,31 +238,41 @@ export default class MongoAdapter
   }
 
   async get<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
-    const model = this.getModel<T>(request.entity);
+      try {
+          const model = this.getModel<T>(request.entity);
 
-    const query = model.findOne(request.data);
+          const query =
+          request.id ? model.findById<T>(request.id) : model.findOne<T>(this.convertFilter(request.filter));
 
-    if(request.options?.select) query.select(request.options.select.join(" "));
+
+          if(request.options?.select) query.select(request.options.select.join(" "));
 
 
-    const item = await query.lean().exec();
+          const item = await query.lean().exec();
 
-    const responseData = {
-      type: "single",
-      item,
-    } as RawQlResponseData<T>;
+          const responseData = {
+              type: "single",
+              item,
+          } as RawQlResponseData<T>;
 
-    return {
-      status: true,
-      message: `Fetched ${request.entity} successfully`,
-      data: responseData,
-    };
+          return {
+              status: true,
+              message: `Fetched ${request.entity} successfully`,
+              data: responseData,
+          };
+      } catch(e: any) {
+          return {
+              status: false,
+              message: e.message,
+              data: null,
+          }
+      }
   }
 
   async create<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
 
-    const item = await model.create(request.data);
+    const item = await model.create<T>(request.data as T);
 
     const responseData = {
       type: "single",
@@ -279,17 +289,11 @@ export default class MongoAdapter
   async update<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
 
-    const item = request.id
-      ? ((await model
-        .findByIdAndUpdate(request.id, request.data, { new: true })
-        .lean()
-        .exec()) as T)
-      : ((await model
-        .findOneAndUpdate(request.filter, request.data, {
-          new: true,
-        })
-        .lean()
-        .exec()) as T);
+    const query = request.id ? model.findByIdAndUpdate<T>(request.id, request.data, {new: true}) : model.findOneAndUpdate(request.filter, request.data, {new: true});
+
+      if(request.options?.select) query.select(request.options.select.join(" "));
+
+    const item = await query.lean().exec() as T;
 
     const responseData: RawQlResponseData<T> = {
       type: "single",
