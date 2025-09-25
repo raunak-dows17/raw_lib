@@ -21,8 +21,7 @@ import {
 } from "../config/types/rawql_response";
 
 export default class MongoAdapter
-  implements RawQlAdapter, RawQlAdapterOperations
-{
+  implements RawQlAdapter, RawQlAdapterOperations {
   private models: Map<String, Model<any>> = new Map();
 
   constructor(uri: string) {
@@ -50,7 +49,7 @@ export default class MongoAdapter
       if (filter.field && filter.op && filter.value != undefined) {
         switch (filter.op) {
           case "eq":
-            mongoFilter[filter.field] = {$eq: filter.value};
+            mongoFilter[filter.field] = { $eq: filter.value };
             break;
           case "ne":
             mongoFilter[filter.field] = { $ne: filter.value };
@@ -240,9 +239,13 @@ export default class MongoAdapter
 
   async get<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
-    const filter = this.convertFilter(request.filter);
 
-    const item = await model.findOne(filter).lean().exec();
+    const query = model.findOne(request.data);
+
+    if(request.options?.select) query.select(request.options.select.join(" "));
+
+
+    const item = await query.lean().exec();
 
     const responseData = {
       type: "single",
@@ -278,15 +281,15 @@ export default class MongoAdapter
 
     const item = request.id
       ? ((await model
-          .findByIdAndUpdate(request.id, request.data, { new: true })
-          .lean()
-          .exec()) as T)
+        .findByIdAndUpdate(request.id, request.data, { new: true })
+        .lean()
+        .exec()) as T)
       : ((await model
-          .findOneAndUpdate(request.filter, request.data, {
-            new: true,
-          })
-          .lean()
-          .exec()) as T);
+        .findOneAndUpdate(request.filter, request.data, {
+          new: true,
+        })
+        .lean()
+        .exec()) as T);
 
     const responseData: RawQlResponseData<T> = {
       type: "single",
