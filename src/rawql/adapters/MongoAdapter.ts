@@ -50,7 +50,7 @@ export default class MongoAdapter
       if (filter.field && filter.op && filter.value != undefined) {
         switch (filter.op) {
           case "eq":
-            mongoFilter[filter.field] = filter.value;
+            mongoFilter[filter.field] = {$eq: filter.value};
             break;
           case "ne":
             mongoFilter[filter.field] = { $ne: filter.value };
