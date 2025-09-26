@@ -48,13 +48,13 @@ export type RawQlOptions = {
   skip?: number;
   page?: number | 1;
   select?: string[];
-  populate: RawQlPopulate;
+  populate?: RawQlPopulate;
 };
 
 export type RawQlPopulate = {
   field: string,
   select?: string[];
-  populate: RawQlPopulate[];
+  populate?: RawQlPopulate[];
 }
 
 export type RawQlPipelineStep =
