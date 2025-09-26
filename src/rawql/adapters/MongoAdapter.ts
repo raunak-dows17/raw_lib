@@ -73,11 +73,14 @@ export default class MongoAdapter
             mongoFilter[filter.field] = { $nin: filter.value };
             break;
           case "search":
-            mongoFilter[filter.field] = { $regex: filter.value, "$options": "i" };
+            mongoFilter[filter.field] = { $regex: filter.value, $options: "i" };
+            break;
           case "startsWith":
-            mongoFilter[filter.field] = { $regex: /^filter.value/i };
+            mongoFilter[filter.field] = { $regex: `^${filter.value}`, $options: "i" };
+            break;
           case "endsWith":
-            mongoFilter[filter.field] = { $regex: `${filter.value}$` };
+            mongoFilter[filter.field] = { $regex: `${filter.value}$`, $options: "i" };
+            break;
           default:
             throw new Error(`Unsupported filter operation: ${filter.op}`);
         }
