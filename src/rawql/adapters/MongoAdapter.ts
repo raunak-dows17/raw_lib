@@ -9,11 +9,11 @@ import {
 } from "mongoose";
 import { RawQlAdapter, RawQlAdapterOperations } from "./rawql_adapter";
 import {
-  FilterOperations,
-  RawQlFilter,
-  RawQlGroup,
-  RawQlPipelineStep,
-  RawQlRequest,
+    FilterOperations,
+    RawQlFilter,
+    RawQlGroup,
+    RawQlPipelineStep, RawQlPopulate,
+    RawQlRequest,
 } from "../config/types/rawql_request";
 import {
   RawQlResponse,
@@ -143,26 +143,21 @@ export default class MongoAdapter
     });
   }
 
-  private convertPopulate(populate: RawQlPopulate[]): {
-    if (!populate || !Array.isArray(populate)) {
-      return [];
-    }
+  private convertPopulate(populate: RawQlPopulate) {
 
-    return populate.map((pop) => {
       const populateConfig: any = {
-        path: pop.field,
+        path: populate.field,
       };
 
-      if (pop?.select) {
-        populateConfig.select = pop.select.join(' ');
+      if (populate?.select) {
+        populateConfig.select = populate.select.join(' ');
       }
 
-      if(pop?.populate) {
-        this.convertPopulate(pop.populate);
+      if(populate?.populate) {
+        populateConfig.populate = populate.populate.map((pop) => this.convertPopulate(pop));
       }
 
       return populateConfig;
-    });
   }
 
   private convertGroup(group: RawQlGroup): any {
@@ -237,7 +232,7 @@ export default class MongoAdapter
     const model = this.getModel<T>(request.entity);
     const filter = this.convertFilter(request.filter);
 
-    const query = model.find(filter).;
+    const query = model.find(filter);
 
     const limit = request.options?.limit ?? 10;
     const page = request.options?.page ?? 1;
@@ -248,7 +243,6 @@ export default class MongoAdapter
     if (request.options?.select) query.select(request.options.select.join(" "));
     if (request.options?.sort)
       query.sort(this.convertSort(request.options.sort));
-    if(request.options?.populate) query.populate;
     if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
     const items = await query.lean().exec();
