@@ -72,6 +72,12 @@ export default class MongoAdapter
           case "nin":
             mongoFilter[filter.field] = { $nin: filter.value };
             break;
+          case "search":
+            mongoFilter[filter.field] = { $regex: filter.value, "$options": "i" };
+          case "startsWith":
+            mongoFilter[filter.field] = { $regex: /^filter.value/i };
+          case "endsWith":
+            mongoFilter[filter.field] = { $regex: `${filter.value}$` };
           default:
             throw new Error(`Unsupported filter operation: ${filter.op}`);
         }
@@ -238,35 +244,35 @@ export default class MongoAdapter
   }
 
   async get<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
-      try {
-          const model = this.getModel<T>(request.entity);
+    try {
+      const model = this.getModel<T>(request.entity);
 
-          const query =
-          request.id ? model.findById<T>(request.id) : model.findOne<T>(this.convertFilter(request.filter));
-
-
-          if(request.options?.select) query.select(request.options.select.join(" "));
+      const query =
+        request.id ? model.findById<T>(request.id) : model.findOne<T>(this.convertFilter(request.filter));
 
 
-          const item = await query.lean().exec();
+      if (request.options?.select) query.select(request.options.select.join(" "));
 
-          const responseData = {
-              type: "single",
-              item,
-          } as RawQlResponseData<T>;
 
-          return {
-              status: true,
-              message: `Fetched ${request.entity} successfully`,
-              data: responseData,
-          };
-      } catch(e: any) {
-          return {
-              status: false,
-              message: e.message,
-              data: null,
-          }
+      const item = await query.lean().exec();
+
+      const responseData = {
+        type: "single",
+        item,
+      } as RawQlResponseData<T>;
+
+      return {
+        status: true,
+        message: `Fetched ${request.entity} successfully`,
+        data: responseData,
+      };
+    } catch (e: any) {
+      return {
+        status: false,
+        message: e.message,
+        data: null,
       }
+    }
   }
 
   async create<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
@@ -289,9 +295,9 @@ export default class MongoAdapter
   async update<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
 
-    const query = request.id ? model.findByIdAndUpdate<T>(request.id, request.data, {new: true}) : model.findOneAndUpdate(request.filter, request.data, {new: true});
+    const query = request.id ? model.findByIdAndUpdate<T>(request.id, request.data, { new: true }) : model.findOneAndUpdate(request.filter, request.data, { new: true });
 
-      if(request.options?.select) query.select(request.options.select.join(" "));
+    if (request.options?.select) query.select(request.options.select.join(" "));
 
     const item = await query.lean().exec() as T;
 

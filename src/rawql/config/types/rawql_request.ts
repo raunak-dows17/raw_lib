@@ -26,7 +26,7 @@ export type FilterOperations =
   | "lte"
   | "in"
   | "nin"
-  | "contains"
+  | "search"
   | "startsWith"
   | "endsWith";
 
