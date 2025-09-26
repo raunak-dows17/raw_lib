@@ -1,6 +1,6 @@
 {
   "name": "raw_lib",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "RawLib — RawQL engine, adapters and validation module",
   "license": "MIT",
   "author": "Raunak pndey",

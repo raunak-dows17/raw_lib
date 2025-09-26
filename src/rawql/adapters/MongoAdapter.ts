@@ -143,6 +143,28 @@ export default class MongoAdapter
     });
   }
 
+  private convertPopulate(populate: RawQlPopulate[]): {
+    if (!populate || !Array.isArray(populate)) {
+      return [];
+    }
+
+    return populate.map((pop) => {
+      const populateConfig: any = {
+        path: pop.field,
+      };
+
+      if (pop?.select) {
+        populateConfig.select = pop.select.join(' ');
+      }
+
+      if(pop?.populate) {
+        this.convertPopulate(pop.populate);
+      }
+
+      return populateConfig;
+    });
+  }
+
   private convertGroup(group: RawQlGroup): any {
     const mongooseGroup: any = { _id: group._id };
 
@@ -215,7 +237,7 @@ export default class MongoAdapter
     const model = this.getModel<T>(request.entity);
     const filter = this.convertFilter(request.filter);
 
-    const query = model.find(filter);
+    const query = model.find(filter).;
 
     const limit = request.options?.limit ?? 10;
     const page = request.options?.page ?? 1;
@@ -226,6 +248,8 @@ export default class MongoAdapter
     if (request.options?.select) query.select(request.options.select.join(" "));
     if (request.options?.sort)
       query.sort(this.convertSort(request.options.sort));
+    if(request.options?.populate) query.populate;
+    if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
     const items = await query.lean().exec();
     const totalItems = await model.countDocuments(filter).exec();
@@ -255,7 +279,7 @@ export default class MongoAdapter
 
 
       if (request.options?.select) query.select(request.options.select.join(" "));
-
+          if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
       const item = await query.lean().exec();
 
@@ -301,6 +325,7 @@ export default class MongoAdapter
     const query = request.id ? model.findByIdAndUpdate<T>(request.id, request.data, { new: true }) : model.findOneAndUpdate(request.filter, request.data, { new: true });
 
     if (request.options?.select) query.select(request.options.select.join(" "));
+        if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
     const item = await query.lean().exec() as T;
 
