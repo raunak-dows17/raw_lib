@@ -143,21 +143,22 @@ export default class MongoAdapter
     });
   }
 
-  private convertPopulate(populate: RawQlPopulate) {
+  private convertPopulate(populates: RawQlPopulate[]) {
+      return populates.map((populate) => {
+          const populateConfig: any = {
+              path: populate.field,
+          };
 
-      const populateConfig: any = {
-        path: populate.field,
-      };
+          if (populate?.select) {
+              populateConfig.select = populate.select.join(' ');
+          }
 
-      if (populate?.select) {
-        populateConfig.select = populate.select.join(' ');
-      }
+          if (populate?.populate) {
+              populateConfig.populate = this.convertPopulate(populate.populate);
+          }
 
-      if(populate?.populate) {
-        populateConfig.populate = populate.populate.map((pop) => this.convertPopulate(pop));
-      }
-
-      return populateConfig;
+          return populateConfig;
+      });
   }
 
   private convertGroup(group: RawQlGroup): any {
