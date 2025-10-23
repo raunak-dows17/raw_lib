@@ -317,7 +317,7 @@ export default class MongoAdapter
   async update<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
 
-    const query = request.id ? model.findByIdAndUpdate<T>(request.id, request.data, { new: true }) : model.findOneAndUpdate(request.filter, request.data, { new: true });
+    const query = request.id ? model.findByIdAndUpdate<T>(request.id, {$set: request.data}, { new: true }) : model.findOneAndUpdate(request.filter, {$set: request.data}, { new: true });
 
     if (request.options?.select) query.select(request.options.select.join(" "));
         if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
