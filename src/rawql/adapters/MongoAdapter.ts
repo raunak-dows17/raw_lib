@@ -11,14 +11,30 @@ import { RawQlAdapter, RawQlAdapterOperations } from "./rawql_adapter";
 import {
     FilterOperations,
     RawQlFilter,
+    RawQlGraphLookup,
     RawQlGroup,
+    RawQlLookup,
     RawQlPipelineStep, RawQlPopulate,
     RawQlRequest,
+    RawQlUnwind,
 } from "../config/types/rawql_request";
 import {
   RawQlResponse,
   RawQlResponseData,
 } from "../config/types/rawql_response";
+
+type FacetPipelineStage = 
+  | PipelineStage.Match 
+  | PipelineStage.Group 
+  | PipelineStage.Sort 
+  | PipelineStage.Limit 
+  | PipelineStage.Skip 
+  | PipelineStage.Project 
+  | PipelineStage.Lookup 
+  | PipelineStage.Unwind 
+  | PipelineStage.AddFields 
+  | PipelineStage.Count 
+  | PipelineStage.GraphLookup;
 
 export default class MongoAdapter
   implements RawQlAdapter, Partial<RawQlAdapterOperations> {
@@ -125,7 +141,7 @@ export default class MongoAdapter
   }
 
   private convertPipeline(pipeline: RawQlPipelineStep[]): PipelineStage[] {
-    return pipeline.map((step) => {
+    return pipeline.map((step): PipelineStage => {
       if ("match" in step) {
         return { $match: this.convertFilter(step.match) };
       } else if ("group" in step) {
@@ -138,9 +154,111 @@ export default class MongoAdapter
         return { $skip: step.skip };
       } else if ("project" in step) {
         return { $project: step.project };
+      } else if ("lookup" in step) {
+        return { $lookup: this.convertLookup(step.lookup) };
+      } else if ("unwind" in step) {
+        return { $unwind: this.convertUnwind(step.unwind) };
+      } else if ("addFields" in step) {
+        return { $addFields: step.addFields };
+      } else if ("count" in step) {
+        return { $count: step.count };
+      } else if ("graphLookup" in step) {
+        return { $graphLookup: this.convertGraphLookup(step.graphLookup) };
+      } else if ("facet" in step) {
+        // Convert nested pipeline steps in facet
+        const facetStages: Record<string, FacetPipelineStage[]> = {};
+        Object.entries(step.facet).forEach(([key, steps]) => {
+          facetStages[key] = this.convertFacetPipeline(steps);
+        });
+        return { $facet: facetStages } as PipelineStage.Facet;
       }
       throw new Error(`Unknown pipeline step: ${JSON.stringify(step)}`);
     });
+  }
+
+   // Special converter for facet pipelines (they don't support all stages)
+  private convertFacetPipeline(pipeline: RawQlPipelineStep[]): FacetPipelineStage[] {
+    return pipeline.map((step): FacetPipelineStage => {
+      if ("match" in step) {
+        return { $match: this.convertFilter(step.match) } as PipelineStage.Match;
+      } else if ("group" in step) {
+        return { $group: this.convertGroup(step.group) } as PipelineStage.Group;
+      } else if ("sort" in step) {
+        return { $sort: this.convertSort(step.sort) } as PipelineStage.Sort;
+      } else if ("limit" in step) {
+        return { $limit: step.limit } as PipelineStage.Limit;
+      } else if ("skip" in step) {
+        return { $skip: step.skip } as PipelineStage.Skip;
+      } else if ("project" in step) {
+        return { $project: step.project } as PipelineStage.Project;
+      } else if ("lookup" in step) {
+        return { $lookup: this.convertLookup(step.lookup) } as PipelineStage.Lookup;
+      } else if ("unwind" in step) {
+        return { $unwind: this.convertUnwind(step.unwind) } as PipelineStage.Unwind;
+      } else if ("addFields" in step) {
+        return { $addFields: step.addFields } as PipelineStage.AddFields;
+      } else if ("count" in step) {
+        return { $count: step.count } as PipelineStage.Count;
+      } else if ("graphLookup" in step) {
+        return { $graphLookup: this.convertGraphLookup(step.graphLookup) } as PipelineStage.GraphLookup;
+      }
+      throw new Error(`Unsupported pipeline step in facet: ${JSON.stringify(step)}`);
+    });
+  }
+
+  private convertLookup(lookup: RawQlLookup): any {
+    // Simple collection join
+    if ("from" in lookup && 'localField' in lookup) {
+      return {
+        from: lookup.from,
+        localField: lookup.localField,
+        foreignField: lookup.foreignField,
+        as: lookup.as || lookup.from
+      };
+    }
+    
+    // Complex pipeline join
+    if ('let' in lookup) {
+      return {
+        from: lookup.from,
+        let: lookup.let,
+        pipeline: this.convertPipeline(lookup.pipeline || []),
+        as: lookup.as || lookup.from
+      };
+    }
+
+    throw new Error(`Invalid lookup configuration: ${JSON.stringify(lookup)}`);
+  }
+
+  private convertUnwind(unwind: string | RawQlUnwind): any {
+    if (typeof unwind === 'string') {
+      return `$${unwind}`;
+    }
+    
+    return {
+      path: `$${unwind.path}`,
+      ...(unwind.preserveNullAndEmptyArrays !== undefined && {
+        preserveNullAndEmptyArrays: unwind.preserveNullAndEmptyArrays
+      }),
+      ...(unwind.includeArrayIndex !== undefined && {
+        includeArrayIndex: unwind.includeArrayIndex
+      })
+    };
+  }
+
+  private convertGraphLookup(graphLookup: RawQlGraphLookup): any {
+    return {
+      from: graphLookup.from,
+      startWith: graphLookup.startWith,
+      connectFromField: graphLookup.connectFromField,
+      connectToField: graphLookup.connectToField,
+      as: graphLookup.as,
+      ...(graphLookup.maxDepth && { maxDepth: graphLookup.maxDepth }),
+      ...(graphLookup.depthField && { depthField: graphLookup.depthField }),
+      ...(graphLookup.restrictSearchWithMatch && { 
+        restrictSearchWithMatch: graphLookup.restrictSearchWithMatch 
+      })
+    };
   }
 
   private convertPopulate(populates: RawQlPopulate[]) {

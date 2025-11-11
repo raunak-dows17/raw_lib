@@ -61,9 +61,47 @@ export type RawQlPipelineStep =
   | { match: RawQlFilter }
   | { group: RawQlGroup }
   | { sort: { field: string; direction: "asc" | "desc" }[] }
-  | { limit: number | 10 }
+  | { limit: number }
   | { skip: number }
-  | { project: { [field: string]: 0 | 1 } };
+  | { project: Record<string, any> }
+  | { lookup: RawQlLookup }
+  | { unwind: string | RawQlUnwind }
+  | { addFields: Record<string, any> }
+  | { count: string }
+  | { graphLookup: RawQlGraphLookup }
+  | { facet: Record<string, RawQlPipelineStep[]> };
+
+// Lookup types
+export type RawQlLookup = 
+  | {
+      from: string;
+      localField: string;
+      foreignField: string;
+      as?: string;
+    }
+  | {
+      from: string;
+      let: Record<string, any>;
+      pipeline: RawQlPipelineStep[];
+      as?: string;
+    };
+
+export type RawQlUnwind = {
+  path: string;
+  preserveNullAndEmptyArrays?: boolean;
+  includeArrayIndex?: string;
+};
+
+export type RawQlGraphLookup = {
+  from: string;
+  startWith: string;
+  connectFromField: string;
+  connectToField: string;
+  as: string;
+  maxDepth?: number;
+  depthField?: string;
+  restrictSearchWithMatch?: any;
+};
 
 export interface RawQlGroup {
   _id: string | Record<string, string>;
@@ -72,5 +110,5 @@ export interface RawQlGroup {
 
 export interface RawQlAggreateField {
   op: "count" | "sum" | "avg" | "min" | "max";
-  field?: string[];
+  field?: string;
 }
