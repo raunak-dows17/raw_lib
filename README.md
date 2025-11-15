@@ -1,23 +1,37 @@
-# 🧠 raw_lib — A Modular Query & Validation Engine for Node.js
+# 🧠 raw_lib — Modular Query, Validation & Authentication Engine for Node.js
 
-`raw_lib` is a modular, flexible, and database-independent library that enables structured query execution (RawQL) and schema-based validation (RawVal) using a Clean Architecture mindset.
+`raw_lib` is a modular backend framework built around three core systems:
 
-It’s designed to empower backend developers to rapidly implement standardized APIs, reduce boilerplate, and let frontends query exactly what they need — securely and scalably.
+- **RawQL** → Structured query engine
+- **RawVal** → Schema validation engine
+- **RawAuth** → Authentication & session security engine
+
+All three are framework-agnostic, database-independent, and follow Clean Architecture principles.
+
+It’s designed for serious backend work:
+
+- predictable structure
+- strict type-safety
+- reusable logic
+- cross-framework compatibility
+- minimal boilerplate
 
 ---
 
-## 🔥 Why raw_lib?
+# 🔥 Why raw_lib?
 
-- ✅ **Database Independent** (MongoDB, SQL, Redis, etc.)
-- 🚀 **Structured Query Engine**: Run create, read, update, delete, list, count, and aggregation through unified `RawQlRequest`
-- 🔒 **Integrated Validation Engine** (RawVal)
-- 🔌 **Pluggable Adapters & Middleware**
-- ♻️ **Reusable in CLI, API, or Microservices**
+- 🧩 **Modular & Extensible** — use only RawQL, or RawAuth, or all combined
+- 🗄️ **Database Independent** — MongoDB, SQL, Redis, you choose
+- 🔧 **Strict Query System** — replace ad-hoc CRUD with structured `RawQlRequest`
+- 🔐 **Built-in Authentication System** (RawAuth)
+- 🛡️ **Built-in Validation System** (RawVal)
+- 🚀 **Adapter-driven architecture**
 - 🧰 **Written in TypeScript**
+- ♻️ **Works in Express, Fastify, Hono, NestJS, Cloudflare Workers**
 
 ---
 
-## 📦 Installation
+# 📦 Installation
 
 ```bash
 npm install raw_lib
@@ -25,18 +39,23 @@ npm install raw_lib
 
 ---
 
-## 📁 Structure
+# 📁 Core Modules
 
-- `rawql/` — Core query execution engine
-- `rawval/` — Validation engine (optional)
-- `adapters/` — Adapter interfaces & implementations (MongoDB etc.)
-- `types/` — Cleanly defined types for request & response
+```
+rawql/       => Structured Query Engine
+rawval/      => Validation Engine
+rawauth/     => Authentication Engine
+adapters/    => Mongo / Redis / Future SQL adapters
+types/       => Clean request & response types
+```
 
 ---
 
-## 📘 RawQl: Query Engine
+# 🔷 RawQL — Structured Query Engine
 
-### 🔄 Supported Operations
+RawQL standardizes backend data access through a **typed request format**.
+
+### Supported Operations
 
 ```ts
 export type RawQlOperation =
@@ -51,75 +70,73 @@ export type RawQlOperation =
 
 ---
 
-### 📥 `RawQlRequest`
+### 📨 RawQlRequest
 
 ```ts
 const request: RawQlRequest = {
   type: "list",
-  entity: "User",
+  entity: "users",
   filter: { field: "role", op: "eq", value: "admin" },
   options: {
     page: 1,
     limit: 10,
     sort: [{ field: "createdAt", direction: "desc" }],
-    populate: ["profile"], // Mongoose adapter only
   },
 };
 ```
 
 ---
 
-### 📤 `RawQlResponse`
+### 📬 RawQlResponse
 
 ```ts
 {
   status: true,
-  message: "Fetched User list successfully",
+  message: "Fetched users successfully",
   data: {
     type: "paginated",
     items: [...],
-    totalItems: 10,
+    totalItems: 42,
     currentPage: 1,
-    totalPages: 1
+    totalPages: 5
   }
 }
 ```
 
 ---
 
-## 🧩 MongoAdapter (example)
+# 🧩 RawQL MongoAdapter Example
 
 ```ts
-import { MongoAdapter } from "raw_lib";
-import mongoose from "mongoose";
+import MongoAdapter from "raw_lib/rawql/adapters/mongo_adapter";
+import { RawQlEngine } from "raw_lib/rawql";
 
-const adapter = new MongoAdapter("mongodb://localhost:27017/mydb");
+const adapter = new MongoAdapter("mongodb://localhost/mydb");
 
-adapter.registerModel("User", userSchema);
-adapter.registerModel("Todo", todoSchema);
-```
+// Register Mongoose schemas
+adapter.registerModel("users", userSchema);
+adapter.registerModel("todos", todoSchema);
 
-Then use it in the engine:
-
-```ts
-import { RawQlEngine } from "raw_lib";
 const engine = new RawQlEngine(adapter);
 
 const response = await engine.execute({
   type: "get",
-  entity: "User",
+  entity: "users",
   filter: { field: "username", op: "eq", value: "raunak" },
 });
 ```
 
 ---
 
-## 🛡️ Validation (RawVal Engine)
+# 🛡️ RawVal — Validation Engine
 
 ```ts
-const validator = new RawValEngine();
+import { RawValEngine } from "raw_lib/rawval";
+import { z } from "zod";
 
-validator.register("User", {
+const val = new RawValEngine();
+
+val.register("users", {
   create: {
     username: z.string().min(3),
     email: z.string().email(),
@@ -128,71 +145,153 @@ validator.register("User", {
 });
 ```
 
+Validation is fully optional but recommended.
+
 ---
 
-## ⚙️ Middleware Support
+# 🔐 RawAuth — Authentication & Device Session Engine
+
+RawAuth is a **database-agnostic authentication module** that plugs directly into RawQL and handles:
+
+- 🔑 Password login
+- ✉️ Email & phone OTP login
+- 📱 Device-based session tracking
+- 🪪 Short-lived JWT issuing
+- 🕵️ Token verification with fingerprint matching
+- 🚫 Revoking sessions / logout
+- 🔒 OTP storage with hashing + expiry
+- 🧪 Provider-agnostic OTP delivery (SMS/Email via Twilio, SendGrid, etc.)
+
+### RawAuth does _not_ touch the database directly.
+
+It calls **RawQL**, which calls your adapter (Mongo/SQL/Redis…).
+
+---
+
+## ⚙️ RawAuth Usage Example (Mongo + Express)
 
 ```ts
-engine.use(async (req) => {
-  // Example: Inject userId
-  req.data.userId = "xyz123";
+import express from "express";
+import MongoAdapter from "raw_lib/rawql/adapters/mongo_adapter";
+import { RawAuthEngine } from "raw_lib/rawauth";
+import { registerModels } from "./models/registerModels";
+
+const mongo = new MongoAdapter("mongodb://localhost:27017/rawlib");
+registerModels(mongo); // users, deviceSessions, otpCodes schemas
+
+const rawql = { execute: (req) => mongo.execute(req) };
+
+const auth = new RawAuthEngine({
+  rawql,
+  jwtSecret: process.env.JWT_SECRET,
+});
+
+const app = express();
+app.use(express.json());
+
+// fingerprint helper
+const fp = (req) => ({
+  deviceId: req.headers["x-device-id"],
+  userAgent: req.headers["user-agent"],
+  ip: req.ip,
+});
+
+// password login
+app.post("/auth/login", async (req, res) => {
+  const resp = await auth.loginWithPassword({
+    identifier: req.body.identifier,
+    password: req.body.password,
+    fingerprint: fp(req),
+  });
+  res.json(resp);
+});
+
+// verify token
+app.get("/protected", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  const resp = await auth.verifyToken(token, fp(req));
+  res.status(resp.status ? 200 : 401).json(resp);
 });
 ```
 
 ---
 
-## 📦 Works Seamlessly With:
-
-✅ `raw_cli` (Node CLI generator)  
-✅ Clean Architecture setups  
-✅ Any framework using Express, Fastify, NestJS, etc.
-
----
-
-## 🚀 Example POST /users/list API
+## 🔢 OTP Flow Example
 
 ```ts
-app.post("/users/list", async (req, res) => {
-  const response = await engine.execute(req.body);
-  res.json(response);
+app.post("/auth/otp/send", async (req, res) => {
+  const resp = await auth.sendOtp(req.body.contact);
+  res.json(resp); // returns { status, data: { otpId } }
+});
+
+app.post("/auth/otp/verify", async (req, res) => {
+  const resp = await auth.verifyOtp(req.body.otpId, req.body.code);
+  res.json(resp);
 });
 ```
 
+You can plug in a real provider:
+
+- Twilio SMS
+- SendGrid Email
+- AWS SES
+- Firebase Phone Auth
+
+RawAuth stays the same — only the provider changes.
+
 ---
 
-## 🧠 Example Use Cases
+# 🧠 Example Use Cases
 
-- Replace REST CRUD APIs with structured queries
-- Pass only one generic controller per entity (`/users`, `/todos`)
-- Decouple frontend from backend changes
-- Auto-generate frontend SDKs (future)
-- Add permissions/validation with middlewares
+- Build Firebase-like backend with database & auth abstraction
+- Strict and predictable authentication without framework lock-in
+- Enforce device-based session integrity
+- Replace REST CRUD with structured RawQL queries
+- Use one generic controller to process all entity actions
+- Create backend SDKs for frontend apps
+- Build internal tools with full type safety
 
 ---
 
-## 🏁 Roadmap
+# 🚀 Roadmap
 
-- [x] Mongoose Adapter
-- [x] Zod-based Validation Engine
-- [x] Aggregation Pipeline support
-- [x] Populate support (Mongoose)
-- [ ] Redis Adapter
+## RawQL
+
+- [x] MongoDB Adapter
 - [ ] SQL Adapter
-- [ ] CLI Integration (`raw_cli`)
-- [ ] Socket Adapter (idea stage)
+- [ ] Redis Adapter
+- [ ] GraphQL Transport Layer
+- [ ] Socket Adapter
+
+## RawVal
+
+- [x] Base Validation Engine
+- [ ] Auto-schema generation
+- [ ] DTO generator for frontend
+
+## RawAuth
+
+- [x] User + Device Session Model
+- [x] Password login
+- [x] OTP login
+- [x] JWT issuing
+- [x] Token verification + fingerprint check
+- [ ] OAuth providers (Google, Apple, GitHub)
+- [ ] RBAC / Roles integration with RawQL
+- [ ] Multi-tenant auth
 
 ---
 
-## ✍️ Author
+# ✍️ Author
 
 Made with ❤️ by **Raunak Pandey**
 
-GitHub: [github.com/raunak-dows17](https://github.com/raunak-dows17)
+GitHub: [https://github.com/raunak-dows17](https://github.com/raunak-dows17)
 
 ---
 
-## 📄 License
+# 📄 License
 
-[MIT License](LICENSE)
+MIT — free for commercial and open-source use.
 
-Use it. Improve it. Fork it. Break it. We’re just getting started.
+---
