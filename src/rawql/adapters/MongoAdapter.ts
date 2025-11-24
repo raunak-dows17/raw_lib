@@ -498,12 +498,9 @@ export default class MongoAdapter
       };
     }
 
-    console.log("Mongo Converted Aggregation Pipeline ", this.convertPipeline(request.pipeline));
-    
+    const query = request?.id ? model.findById(id) : model.find(this.convertFilter(request.filter))
 
-    const items = await model
-      .aggregate(this.convertPipeline(request.pipeline))
-      .exec();
+    const items = await query.aggregate(this.convertPipeline(request.pipeline)).exec();
 
     return {
       status: true,
