@@ -498,6 +498,9 @@ export default class MongoAdapter
       };
     }
 
+    console.log("Mongo Pipeline ", this.convertPipeline(request.pipeline));
+    
+
     const items = await model.aggregate(this.convertPipeline(request.pipeline)).exec();
 
     return {
