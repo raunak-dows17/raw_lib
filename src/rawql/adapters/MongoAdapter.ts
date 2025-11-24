@@ -65,7 +65,7 @@ export default class MongoAdapter
       if (filter.field && filter.op && filter.value != undefined) {
         switch (filter.op) {
           case "eq":
-            mongoFilter[filter.field] = { $eq: filter.value };
+            mongoFilter[filter.field] = filter.value;
             break;
           case "ne":
             mongoFilter[filter.field] = { $ne: filter.value };
@@ -498,7 +498,7 @@ export default class MongoAdapter
       };
     }
 
-    const items = request.id ? await model.findById(request.id).aggregate(this.convertPipeline(request.pipeline)) : await model.find(this.convertFilter(request.filter)).aggregate(this.convertPipeline(request.pipeline)).exec();
+    const items = await model.aggregate(this.convertPipeline(request.pipeline)).exec();
 
     return {
       status: true,
