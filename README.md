@@ -172,14 +172,14 @@ It calls **RawQL**, which calls your adapter (Mongo/SQL/Redis…).
 
 ```ts
 import express from "express";
-import MongoAdapter from "raw_lib/rawql/adapters/mongo_adapter";
-import { RawAuthEngine } from "raw_lib/rawauth";
-import { registerModels } from "./models/registerModels";
+import {MongoAdapter} from "raw_lib";
+import {RawQlEngine} from "raw_lib";
+import { RawAuthEngine } from "raw_lib";
 
 const mongo = new MongoAdapter("mongodb://localhost:27017/rawlib");
-registerModels(mongo); // users, deviceSessions, otpCodes schemas
+mongo.registerModels("User", userSchema); // users, deviceSessions, otpCodes schemas
 
-const rawql = { execute: (req) => mongo.execute(req) };
+const rawql = new RawQlEngine(mongo);
 
 const auth = new RawAuthEngine({
   rawql,
