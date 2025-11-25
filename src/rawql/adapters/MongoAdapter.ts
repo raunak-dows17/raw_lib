@@ -208,25 +208,58 @@ export default class MongoAdapter
     });
   }
 
-  private convertLookup(lookup: RawQlLookup): any {
-    // Simple collection join
-    if ("from" in lookup && 'localField' in lookup) {
-      const lookupConfig: any = {
-        from: lookup.from,
-        localField: lookup.localField,
-        foreignField: lookup.foreignField,
-        as: lookup.as || lookup.from,
-      };
+private convertLookup(lookup: RawQlLookup): any {
+  // Simple collection join
+  if ("from" in lookup && 'localField' in lookup) {
+    const lookupConfig: any = {
+      from: lookup.from,
+      localField: lookup.localField,
+      foreignField: lookup.foreignField,
+      as: lookup.as || lookup.from,
+    };
 
-      if (lookup?.let) lookupConfig.let = lookup.let;
+    // If user provided explicit let, keep it
+    if (lookup?.let) lookupConfig.let = lookup.let;
 
-      if (lookup?.pipeline) lookupConfig.pipeline = this.convertPipeline(lookup.pipeline || []);
+    // If pipeline is provided, convert it
+    if (lookup?.pipeline) {
+      // Convert RawQL pipeline to actual Mongo pipeline stages
+      const convertedPipeline = this.convertPipeline(lookup.pipeline || []);
 
-      return lookupConfig;
+      // If both localField and foreignField are present, Mongo ignores localField/foreignField when pipeline is used.
+      // To preserve the join behavior we need to:
+      // 1) create a let variable that maps the parent localField value into the pipeline (unless user already provided let)
+      // 2) prepend a $match with $expr that compares foreignField to the let variable
+      if (lookup.localField && lookup.foreignField) {
+        // choose a safe var name (avoid $ in var name)
+        const varName = Object.keys(lookupConfig.let || {}).length ? Object.keys(lookupConfig.let!)[0] : `local_${lookup.localField}`;
+
+        // ensure lookupConfig.let exists and maps the varName to the parent field
+        lookupConfig.let = lookupConfig.let || {};
+        // map to the parent field path (as a field reference)
+        lookupConfig.let[varName] = `$${lookup.localField}`;
+
+        // Prepend expression match to enforce the link between parent and foreign docs
+        const exprMatchStage = {
+          $match: {
+            $expr: {
+              $eq: [`$${lookup.foreignField}`, `$$${varName}`]
+            }
+          }
+        };
+
+        // Prepend expr match so it's applied before other pipeline filters
+        convertedPipeline.unshift(exprMatchStage);
+      }
+
+      lookupConfig.pipeline = convertedPipeline;
     }
 
-    throw new Error(`Invalid lookup configuration: ${JSON.stringify(lookup)}`);
+    return lookupConfig;
   }
+
+  throw new Error(`Invalid lookup configuration: ${JSON.stringify(lookup)}`);
+}
 
   private convertUnwind(unwind: string | RawQlUnwind): any {
     if (typeof unwind === 'string') {
