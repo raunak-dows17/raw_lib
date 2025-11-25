@@ -9,31 +9,31 @@ import {
 } from "mongoose";
 import { RawQlAdapter, RawQlAdapterOperations } from "./rawql_adapter";
 import {
-    FilterOperations,
-    RawQlFilter,
-    RawQlGraphLookup,
-    RawQlGroup,
-    RawQlLookup,
-    RawQlPipelineStep, RawQlPopulate,
-    RawQlRequest,
-    RawQlUnwind,
+  FilterOperations,
+  RawQlFilter,
+  RawQlGraphLookup,
+  RawQlGroup,
+  RawQlLookup,
+  RawQlPipelineStep, RawQlPopulate,
+  RawQlRequest,
+  RawQlUnwind,
 } from "../config/types/rawql_request";
 import {
   RawQlResponse,
   RawQlResponseData,
 } from "../config/types/rawql_response";
 
-type FacetPipelineStage = 
-  | PipelineStage.Match 
-  | PipelineStage.Group 
-  | PipelineStage.Sort 
-  | PipelineStage.Limit 
-  | PipelineStage.Skip 
-  | PipelineStage.Project 
-  | PipelineStage.Lookup 
-  | PipelineStage.Unwind 
-  | PipelineStage.AddFields 
-  | PipelineStage.Count 
+type FacetPipelineStage =
+  | PipelineStage.Match
+  | PipelineStage.Group
+  | PipelineStage.Sort
+  | PipelineStage.Limit
+  | PipelineStage.Skip
+  | PipelineStage.Project
+  | PipelineStage.Lookup
+  | PipelineStage.Unwind
+  | PipelineStage.AddFields
+  | PipelineStage.Count
   | PipelineStage.GraphLookup;
 
 export default class MongoAdapter
@@ -65,7 +65,8 @@ export default class MongoAdapter
       if (filter.field && filter.op && filter.value != undefined) {
         switch (filter.op) {
           case "eq":
-            mongoFilter[filter.field] = filter.value;
+            filter.field === "_id" ? mongoFilter[filter.field] = new ObjectId(filter.value) :
+              mongoFilter[filter.field] = filter.value;
             break;
           case "ne":
             mongoFilter[filter.field] = { $ne: filter.value };
@@ -176,7 +177,7 @@ export default class MongoAdapter
     });
   }
 
-   // Special converter for facet pipelines (they don't support all stages)
+  // Special converter for facet pipelines (they don't support all stages)
   private convertFacetPipeline(pipeline: RawQlPipelineStep[]): FacetPipelineStage[] {
     return pipeline.map((step): FacetPipelineStage => {
       if ("match" in step) {
@@ -216,7 +217,7 @@ export default class MongoAdapter
         as: lookup.as || lookup.from
       };
     }
-    
+
     // Complex pipeline join
     if ('let' in lookup) {
       return {
@@ -234,7 +235,7 @@ export default class MongoAdapter
     if (typeof unwind === 'string') {
       return `$${unwind}`;
     }
-    
+
     return {
       path: `$${unwind.path}`,
       ...(unwind.preserveNullAndEmptyArrays !== undefined && {
@@ -255,28 +256,28 @@ export default class MongoAdapter
       as: graphLookup.as,
       ...(graphLookup.maxDepth && { maxDepth: graphLookup.maxDepth }),
       ...(graphLookup.depthField && { depthField: graphLookup.depthField }),
-      ...(graphLookup.restrictSearchWithMatch && { 
-        restrictSearchWithMatch: graphLookup.restrictSearchWithMatch 
+      ...(graphLookup.restrictSearchWithMatch && {
+        restrictSearchWithMatch: graphLookup.restrictSearchWithMatch
       })
     };
   }
 
   private convertPopulate(populates: RawQlPopulate[]) {
-      return populates.map((populate) => {
-          const populateConfig: any = {
-              path: populate.field,
-          };
+    return populates.map((populate) => {
+      const populateConfig: any = {
+        path: populate.field,
+      };
 
-          if (populate?.select) {
-              populateConfig.select = populate.select.join(' ');
-          }
+      if (populate?.select) {
+        populateConfig.select = populate.select.join(' ');
+      }
 
-          if (populate?.populate) {
-              populateConfig.populate = this.convertPopulate(populate.populate);
-          }
+      if (populate?.populate) {
+        populateConfig.populate = this.convertPopulate(populate.populate);
+      }
 
-          return populateConfig;
-      });
+      return populateConfig;
+    });
   }
 
   private convertGroup(group: RawQlGroup): any {
@@ -362,7 +363,7 @@ export default class MongoAdapter
     if (request.options?.select) query.select(request.options.select.join(" "));
     if (request.options?.sort)
       query.sort(this.convertSort(request.options.sort));
-    if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
+    if (request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
     const items = await query.lean().exec();
     const totalItems = await model.countDocuments(filter).exec();
@@ -392,7 +393,7 @@ export default class MongoAdapter
 
 
       if (request.options?.select) query.select(request.options.select.join(" "));
-          if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
+      if (request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
       const item = await query.lean().exec();
 
@@ -435,10 +436,10 @@ export default class MongoAdapter
   async update<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
     const model = this.getModel<T>(request.entity);
 
-    const query = request.id ? model.findByIdAndUpdate<T>(request.id, {$set: request.data}, { new: true }) : model.findOneAndUpdate(request.filter, {$set: request.data}, { new: true });
+    const query = request.id ? model.findByIdAndUpdate<T>(request.id, { $set: request.data }, { new: true }) : model.findOneAndUpdate(request.filter, { $set: request.data }, { new: true });
 
     if (request.options?.select) query.select(request.options.select.join(" "));
-        if(request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
+    if (request.options?.populate) query.populate(this.convertPopulate(request.options?.populate));
 
     const item = await query.lean().exec() as T;
 
@@ -499,7 +500,7 @@ export default class MongoAdapter
     }
 
     console.log("Mongo Pipeline ", this.convertPipeline(request.pipeline));
-    
+
 
     const items = await model.aggregate(this.convertPipeline(request.pipeline)).exec();
 
