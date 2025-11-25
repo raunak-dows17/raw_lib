@@ -77,8 +77,8 @@ export type RawQlLookup =
       from: string;
       localField: string;
       foreignField: string;
-      let: Record<string, any>;
-      pipeline: RawQlPipelineStep[];
+      let?: Record<string, any>;
+      pipeline?: RawQlPipelineStep[];
       as?: string;
     };
 

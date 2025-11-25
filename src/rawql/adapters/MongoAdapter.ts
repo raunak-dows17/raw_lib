@@ -218,9 +218,9 @@ export default class MongoAdapter
         as: lookup.as || lookup.from,
       };
 
-      if (lookup.let) lookupConfig.let = lookup.let;
+      if (lookup?.let) lookupConfig.let = lookup.let;
 
-      if (lookup.pipeline) lookupConfig.pipeline = this.convertPipeline(lookup.pipeline || []);
+      if (lookup?.pipeline) lookupConfig.pipeline = this.convertPipeline(lookup.pipeline || []);
 
       return lookupConfig;
     }
