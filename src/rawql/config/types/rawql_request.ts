@@ -73,14 +73,10 @@ export type RawQlPipelineStep =
 
 // Lookup types
 export type RawQlLookup = 
-  | {
+  {
       from: string;
       localField: string;
       foreignField: string;
-      as?: string;
-    }
-  | {
-      from: string;
       let: Record<string, any>;
       pipeline: RawQlPipelineStep[];
       as?: string;

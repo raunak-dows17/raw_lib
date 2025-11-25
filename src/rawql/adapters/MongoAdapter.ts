@@ -211,22 +211,18 @@ export default class MongoAdapter
   private convertLookup(lookup: RawQlLookup): any {
     // Simple collection join
     if ("from" in lookup && 'localField' in lookup) {
-      return {
+      const lookupConfig: any = {
         from: lookup.from,
         localField: lookup.localField,
         foreignField: lookup.foreignField,
-        as: lookup.as || lookup.from
+        as: lookup.as || lookup.from,
       };
-    }
 
-    // Complex pipeline join
-    if ('let' in lookup) {
-      return {
-        from: lookup.from,
-        let: lookup.let,
-        pipeline: this.convertPipeline(lookup.pipeline || []),
-        as: lookup.as || lookup.from
-      };
+      if (lookup.let) lookupConfig.let = lookup.let;
+
+      if (lookup.pipeline) lookupConfig.pipeline = this.convertPipeline(lookup.pipeline || []);
+
+      return lookupConfig;
     }
 
     throw new Error(`Invalid lookup configuration: ${JSON.stringify(lookup)}`);
@@ -347,6 +343,30 @@ export default class MongoAdapter
           data: null,
         };
     }
+  }
+
+    // Helper method to detect if pipeline has pagination stages
+  private hasPaginationStages(pipeline: RawQlPipelineStep[]): boolean {
+    return pipeline.some(step => 
+      'limit' in step || 'skip' in step
+    );
+  }
+
+  // Helper method to extract pagination parameters from pipeline
+  private extractPaginationParams(pipeline: RawQlPipelineStep[]): { limit?: number; skip?: number } {
+    let limit: number | undefined;
+    let skip: number | undefined;
+
+    pipeline.forEach(step => {
+      if ('limit' in step) {
+        limit = step.limit;
+      }
+      if ('skip' in step) {
+        skip = step.skip;
+      }
+    });
+
+    return { limit, skip };
   }
 
   async list<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
@@ -481,28 +501,91 @@ export default class MongoAdapter
     };
   }
 
-  async aggregate<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
-    const model = this.getModel<T>(request.entity);
+async aggregate<T>(request: RawQlRequest): Promise<RawQlResponse<T>> {
+  const model = this.getModel<T>(request.entity);
 
-    if (!request.pipeline) {
-      return {
-        status: false,
-        message: "Missing 'pipeline' in aggregate request",
-        data: null,
-      };
+  if (!request.pipeline) {
+    return {
+      status: false,
+      message: "Missing 'pipeline' in aggregate request",
+      data: null,
+    };
+  }
+
+  if (!Array.isArray(request?.pipeline)) {
+    return {
+      status: false,
+      message: "Missing 'pipeline' array in aggregate request",
+      data: null,
+    };
+  }
+
+  console.log("Mongo Pipeline ", this.convertPipeline(request.pipeline));
+
+  const hasPagination = this.hasPaginationStages(request.pipeline);
+  
+  if (hasPagination) {
+    const { limit, skip } = this.extractPaginationParams(request.pipeline);
+    
+    // Execute the main query to get items
+    const items = await model.aggregate(this.convertPipeline(request.pipeline)).exec();
+
+    // Create a pipeline for counting total items without pagination
+    const countPipeline = request.pipeline.filter(step => 
+      !('limit' in step) && !('skip' in step)
+    );
+
+    // Check if the pipeline has grouping operations
+    const hasGroupStage = countPipeline.some(step => 'group' in step);
+    
+    let totalItems = 0;
+
+    if (hasGroupStage) {
+      // For grouped queries, count the grouped documents
+      const groupingPipeline = [...countPipeline];
+      const countResult = await model.aggregate([
+        ...this.convertPipeline(groupingPipeline),
+        { $count: "total" }
+      ]).exec();
+      totalItems = countResult[0]?.total || 0;
+    } else {
+      // For non-grouped queries, we can use a simpler approach
+      // Reconstruct the match filter from the pipeline for counting
+      const matchStages = countPipeline.filter(step => 'match' in step);
+      if (matchStages.length > 0) {
+        // If there are match stages, use countDocuments with the combined filter
+        const matchFilters = matchStages.map((step: any) => this.convertFilter(step.match));
+        const combinedFilter = matchFilters.length === 1 ? matchFilters[0] : { $and: matchFilters };
+        totalItems = await model.countDocuments(combinedFilter).exec();
+      } else {
+        // No filters, count all documents
+        totalItems = await model.estimatedDocumentCount().exec();
+      }
     }
 
-    if (!Array.isArray(request?.pipeline)) {
-      return {
-        status: false,
-        message: "Missing 'pipeline' array in aggregate request",
-        data: null,
-      };
-    }
+    const currentPage = skip && limit ? Math.floor(skip / limit) + 1 : 1;
+    const totalPages = limit ? Math.ceil(totalItems / limit) : 1;
+    const hasMore = limit ? skip! + limit < totalItems : false;
+    const nextPage = hasMore ? currentPage + 1 : undefined;
+    const prevPage = currentPage > 1 ? currentPage - 1 : undefined;
 
-    console.log("Mongo Pipeline ", this.convertPipeline(request.pipeline));
-
-
+    return {
+      status: true,
+      message: `Aggregated ${request.entity} successfully`,
+      data: {
+        type: "paginated",
+        items,
+        currentPage,
+        nextPage,
+        prevPage,
+        hasMore,
+        totalItems,
+        totalPages,
+        limit: limit || 10,
+      },
+    };
+  } else {
+    // No pagination stages, return multiple items
     const items = await model.aggregate(this.convertPipeline(request.pipeline)).exec();
 
     return {
@@ -514,6 +597,7 @@ export default class MongoAdapter
       },
     };
   }
+}
 
   close(): Promise<void> {
     return disconnect();
