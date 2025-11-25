@@ -6,6 +6,7 @@ import {
   mongo,
   PipelineStage,
   Schema,
+  Types
 } from "mongoose";
 import { RawQlAdapter, RawQlAdapterOperations } from "./rawql_adapter";
 import {
@@ -65,7 +66,7 @@ export default class MongoAdapter
       if (filter.field && filter.op && filter.value != undefined) {
         switch (filter.op) {
           case "eq":
-            filter.field === "_id" ? mongoFilter[filter.field] = new ObjectId(filter.value) :
+            filter.field === "_id" ? mongoFilter[filter.field] = new Types.ObjectId(filter.value) :
               mongoFilter[filter.field] = filter.value;
             break;
           case "ne":
