@@ -26,7 +26,7 @@ export default class RawQlEngine {
     request: RawQlRequest
   ): Promise<RawQlResponse<T | number>> {
     try {
-      this.logRequest(request);
+      // this.logRequest(request);
 
       this.validate(request);
 
@@ -68,7 +68,7 @@ export default class RawQlEngine {
       }
 
       const response = await this.dispatch<T>(request);
-      this.logResponse(response);
+      // this.logResponse(response);
 
       return response;
     } catch (error: any) {
