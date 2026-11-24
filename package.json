@@ -1,0 +1,59 @@
+{
+  "name": "raw_lib",
+  "version": "2.0.0-alpha.0",
+  "description": "Modular, adapter-driven query, validation and authentication toolkit for Node.js",
+  "license": "MIT",
+  "author": "Raunak Pandey",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "prepublishOnly": "npm run build",
+    "release:next": "npm publish --tag next --access public --provenance"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.1.1",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  },
+  "keywords": [
+    "rawql",
+    "rawlib",
+    "query-engine",
+    "validation",
+    "authentication",
+    "clean-architecture",
+    "adapter",
+    "typescript"
+  ]
+}
