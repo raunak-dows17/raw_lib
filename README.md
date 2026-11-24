@@ -2,9 +2,11 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0-alpha** — the core engine, Mongo adapter, validation, password auth, and OTP
-> login are implemented; packaging, examples, and the 2.0.0 release land next. v1 remains
-> available on `main` and npm.
+> Status: **2.0.0** — the core engine, Mongo adapter, validation, password and OTP auth,
+> examples, and migration guide are complete. v1 remains available on `main` and npm.
+
+See [`MIGRATION.md`](MIGRATION.md) if you are upgrading from 1.x, [`CHANGELOG.md`](CHANGELOG.md)
+for the release notes, and [`examples`](examples) for Express, Fastify, and Hono servers.
 
 ## What it is
 
@@ -214,6 +216,21 @@ consumed exactly once. Requests are throttled per contact, attempts are capped, 
 contacts receive the same response shape without a message being sent. Both providers use
 `fetch`, so they work on Node 18+, edge runtimes, and with injected test doubles.
 
+## Examples
+
+[`examples`](examples) contains the same API — register, login, refresh, logout, `/me`, and a
+users list — built with Express, Fastify, and Hono. Each runs on the memory adapter with no
+external services:
+
+```bash
+cd examples/hono
+npm install
+npm run dev
+```
+
+Swap `MemoryAdapter` for `mongo()` from `raw_lib/mongo` to persist data; application code stays
+the same.
+
 ## Design rules
 
 - Adapters receive a normalized query, never the raw request.
@@ -230,7 +247,7 @@ contacts receive the same response shape without a message being sent. Both prov
 | RawVal                               | Implemented |
 | RawAuth                              | Implemented |
 | OTP + delivery providers             | Implemented |
-| Packaging, docs, examples, 2.0.0     | Next        |
+| Packaging, docs, examples, 2.0.0     | Implemented |
 | Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
 
 See [`docs/spec.md`](docs/spec.md) for the protocol and [`docs/adr`](docs/adr) for design decisions.

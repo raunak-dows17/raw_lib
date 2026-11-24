@@ -74,6 +74,23 @@ describe("RawQl engine", () => {
     }
   });
 
+  it("can skip validation for trusted internal operations", async () => {
+    const validator: Validator = {
+      validate: () => ({
+        ok: false,
+        issues: [{ path: "email", message: "is required" }],
+      }),
+    };
+
+    const db = createRawQl({ adapter: new MemoryAdapter(), validator });
+    const result = await db.execute(
+      { op: "create", entity: "users", data: { name: "Ada" } },
+      { validate: false },
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
   it("uses parsed validator output for writes", async () => {
     const validator: Validator = {
       validate: ({ data }) => ({

@@ -1,7 +1,7 @@
 import type { RawQl } from "../core/engine/engine";
 import type { RawLibErrorShape } from "../core/errors";
 import { RawLibError, toRawLibError } from "../core/errors";
-import type { Where } from "../core/types/query";
+import type { Query, Where } from "../core/types/query";
 import type { Result } from "../core/types/result";
 import { randomId, randomToken, sha256Hex } from "./crypto";
 import {
@@ -189,6 +189,11 @@ export function createAuth(config: AuthConfig): Auth {
 
   let dummyHash: Promise<string> | undefined;
 
+  // Auth writes are system-level: bypass user-facing validators so request schemas cannot
+  // strip password hashes or session bookkeeping before they reach the adapter.
+  const execute = <T>(query: Query<any>): Promise<Result<T>> =>
+    db.execute<T>(query, { validate: false });
+
   const now = (): Date => clock();
   const nowIso = (): string => now().toISOString();
 
@@ -224,7 +229,7 @@ export function createAuth(config: AuthConfig): Auth {
   }
 
   async function findUser(where: Where<any>): Promise<User | null> {
-    const result = await db.execute<User | null>({
+    const result = await execute<User | null>({
       op: "get",
       entity: entities.users,
       where,
@@ -240,7 +245,7 @@ export function createAuth(config: AuthConfig): Auth {
   }
 
   async function findSession(where: Where<any>): Promise<Session | null> {
-    const result = await db.execute<Session | null>({
+    const result = await execute<Session | null>({
       op: "get",
       entity: entities.sessions,
       where,
@@ -252,7 +257,7 @@ export function createAuth(config: AuthConfig): Auth {
   }
 
   async function findSessionByHistory(hash: string): Promise<Session | null> {
-    const result = await db.execute<Session[]>({
+    const result = await execute<Session[]>({
       op: "list",
       entity: entities.sessions,
       where: { refreshTokenHistory: { in: [hash] } },
@@ -264,7 +269,7 @@ export function createAuth(config: AuthConfig): Auth {
   }
 
   async function findOtp(id: string): Promise<Otp | null> {
-    const result = await db.execute<Otp | null>({
+    const result = await execute<Otp | null>({
       op: "get",
       entity: entities.otps,
       where: { id },
@@ -320,7 +325,7 @@ export function createAuth(config: AuthConfig): Auth {
 
   async function revokeSession(session: Session, reason: string): Promise<void> {
     const revokedAt = nowIso();
-    await db.execute({
+    await execute({
       op: "update",
       entity: entities.sessions,
       where: { id: session.id },
@@ -332,7 +337,7 @@ export function createAuth(config: AuthConfig): Auth {
   }
 
   async function revokeFamily(familyId: string, reason: string): Promise<void> {
-    const active = await db.execute<Session[]>({
+    const active = await execute<Session[]>({
       op: "list",
       entity: entities.sessions,
       where: { familyId, revokedAt: { isNull: true } },
@@ -340,7 +345,7 @@ export function createAuth(config: AuthConfig): Auth {
 
     if (!active.ok || active.data.length === 0) return;
 
-    await db.execute({
+    await execute({
       op: "update",
       entity: entities.sessions,
       where: { familyId, revokedAt: { isNull: true } },
@@ -380,7 +385,7 @@ export function createAuth(config: AuthConfig): Auth {
       rotation: 0,
     };
 
-    const inserted = await db.execute<Session>({
+    const inserted = await execute<Session>({
       op: "create",
       entity: entities.sessions,
       data: session,
@@ -425,7 +430,7 @@ export function createAuth(config: AuthConfig): Auth {
           throw new RawLibError("VALIDATION_FAILED", "Provide an email, phone, or username");
         }
 
-        const existing = await db.execute<unknown[]>({
+        const existing = await execute<unknown[]>({
           op: "list",
           entity: entities.users,
           where,
@@ -449,7 +454,7 @@ export function createAuth(config: AuthConfig): Auth {
           updatedAt: timestamp,
         };
 
-        const created = await db.execute<User>({
+        const created = await execute<User>({
           op: "create",
           entity: entities.users,
           data: doc,
@@ -531,7 +536,7 @@ export function createAuth(config: AuthConfig): Auth {
 
             if (otpRateLimit) {
               const windowStart = new Date(now().getTime() - otpRateLimit.window).toISOString();
-              const recent = await db.execute<number>({
+              const recent = await execute<number>({
                 op: "count",
                 entity: entities.otps,
                 where: { contactHash, createdAt: { gte: windowStart } },
@@ -565,7 +570,7 @@ export function createAuth(config: AuthConfig): Auth {
               consumedAt: null,
             };
 
-            const inserted = await db.execute<Otp>({
+            const inserted = await execute<Otp>({
               op: "create",
               entity: entities.otps,
               data: otp,
@@ -584,7 +589,7 @@ export function createAuth(config: AuthConfig): Auth {
             const sent = await otpProvider.send({ code, contact, channel, purpose });
 
             if (!sent.ok) {
-              await db.execute({
+              await execute({
                 op: "update",
                 entity: entities.otps,
                 where: { id: otp.id },
@@ -645,7 +650,7 @@ export function createAuth(config: AuthConfig): Auth {
             if (!constantTimeHexEqual(expected, otp.codeHash)) {
               const attempts = (otp.attempts ?? 0) + 1;
 
-              await db.execute({
+              await execute({
                 op: "update",
                 entity: entities.otps,
                 where: { id: otp.id },
@@ -668,7 +673,7 @@ export function createAuth(config: AuthConfig): Auth {
               throw new RawLibError("OTP_INVALID", "Invalid verification code");
             }
 
-            const consumed = await db.execute({
+            const consumed = await execute({
               op: "update",
               entity: entities.otps,
               where: { id: otp.id, consumedAt: { isNull: true } },
@@ -734,7 +739,7 @@ export function createAuth(config: AuthConfig): Auth {
           lastUsedAt: refreshedAt.toISOString(),
         };
 
-        const result = await db.execute({
+        const result = await execute({
           op: "update",
           entity: entities.sessions,
           where: { id: session.id },
@@ -783,7 +788,7 @@ export function createAuth(config: AuthConfig): Auth {
         if (!user) throw new RawLibError("TOKEN_INVALID", "Invalid access token");
 
         const lastUsedAt = nowIso();
-        await db.execute({
+        await execute({
           op: "update",
           entity: entities.sessions,
           where: { id: session.id },
@@ -828,7 +833,7 @@ export function createAuth(config: AuthConfig): Auth {
 
     logoutAll(input) {
       return run(async () => {
-        const active = await db.execute<Session[]>({
+        const active = await execute<Session[]>({
           op: "list",
           entity: entities.sessions,
           where: { userId: input.userId, revokedAt: { isNull: true } },
@@ -837,7 +842,7 @@ export function createAuth(config: AuthConfig): Auth {
         if (!active.ok) return failure(active.error);
         if (active.data.length === 0) return { ok: true, data: { revoked: 0 } };
 
-        await db.execute({
+        await execute({
           op: "update",
           entity: entities.sessions,
           where: { userId: input.userId, revokedAt: { isNull: true } },
@@ -861,7 +866,7 @@ export function createAuth(config: AuthConfig): Auth {
     sessions: {
       list(input) {
         return run<PublicSession[]>(async () => {
-          const result = await db.execute<Session[]>({
+          const result = await execute<Session[]>({
             op: "list",
             entity: entities.sessions,
             where: { userId: input.userId },

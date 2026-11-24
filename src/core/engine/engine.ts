@@ -35,6 +35,14 @@ export type Validator = {
   }): Promise<ValidatorResult> | ValidatorResult;
 };
 
+export type ExecuteOptions = {
+  /**
+   * Set to `false` to skip the configured validator. Intended for internal, trusted
+   * operations such as auth persistence; application queries should leave this on.
+   */
+  validate?: boolean;
+};
+
 export type RawQlConfig = {
   adapter: Adapter;
   entities?: EntityRegistry;
@@ -88,7 +96,7 @@ export class RawQl {
     return new EntityClient<T>(this, this.resolveEntity(name));
   }
 
-  async execute<T = unknown>(input: Query<any>): Promise<Result<T>> {
+  async execute<T = unknown>(input: Query<any>, options: ExecuteOptions = {}): Promise<Result<T>> {
     const startedAt = Date.now();
 
     try {
@@ -103,7 +111,7 @@ export class RawQl {
         await middleware({ query, entity, db: this });
       }
 
-      if (this.validator) {
+      if (this.validator && options.validate !== false) {
         const validation = await this.validator.validate({
           op: query.op,
           entity,

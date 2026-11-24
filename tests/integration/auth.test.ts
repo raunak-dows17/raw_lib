@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { type Auth, type AuthConfig, createAuth } from "../../src/auth";
 import { createRawQl, MemoryAdapter } from "../../src/index";
+import { rawval, v } from "../../src/val";
 
 const SECRET = "integration-secret-0123456789";
 
@@ -127,6 +128,31 @@ describe("auth registration", () => {
 
     expect(stored.ok && stored.data?.email).toBe("ada@acme.com");
     expect(stored.ok && stored.data?.passwordHash.startsWith("scrypt$")).toBe(true);
+  });
+
+  it("bypasses user-facing validators for internal auth writes", async () => {
+    const db = createRawQl({
+      adapter: new MemoryAdapter(),
+      validate: rawval({
+        users: {
+          create: v.object({ email: v.string().email() }),
+          update: v.object({ email: v.string().email() }),
+        },
+      }),
+    });
+    const auth = createAuth({ db, secret: SECRET });
+
+    const registered = await auth.register({
+      email: "ada@acme.com",
+      password: "password123",
+    });
+    const login = await auth.login.password({
+      identifier: "ada@acme.com",
+      password: "password123",
+    });
+
+    expect(registered.ok).toBe(true);
+    expect(login.ok).toBe(true);
   });
 
   it("supports a custom password hasher", async () => {

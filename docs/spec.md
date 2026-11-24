@@ -181,6 +181,10 @@ plus its driver-specific integration tests.
 6. Adapter execution.
 7. Result mapping.
 
+`db.execute(query, { validate: false })` skips step 3. It exists for trusted internal
+operations such as RawAuth persistence, where a user-supplied request schema must not strip
+password hashes or session bookkeeping. Application code should leave validation enabled.
+
 ## 11. Memory adapter semantics
 
 - Missing IDs are generated with `crypto.randomUUID()`.
