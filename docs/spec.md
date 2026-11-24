@@ -189,3 +189,21 @@ plus its driver-specific integration tests.
 - Text matching is case-insensitive.
 - `$group` emits `{ _id, ...fields }`.
 - `$count` emits `[{ [name]: count }]`.
+
+## 12. Mongo adapter semantics
+
+The Mongo adapter (`raw_lib/mongo`) uses the native `mongodb` driver and connects lazily.
+
+- **ID mapping.** With the default `idField: "id"`, the adapter stores the logical ID in
+  Mongo's `_id` and returns `_id` values as `id`. ObjectId values are exposed as hex strings.
+  Set `idField: "_id"` to work with raw Mongo documents, or use a custom field for app-owned
+  keys. Custom ID fields are generated with `crypto.randomUUID()` when omitted.
+- **Updates** use `$set` and never change the ID field.
+- **Filters** compile to native operators; `contains`, `startsWith`, and `endsWith` become
+  escaped, case-insensitive regular expressions. `$not` becomes `$nor`.
+- **Pagination** uses `skip`/`limit`; `page.cursor` and `transactions` are not claimed.
+- **Aggregation** supports every neutral pipeline stage. `$group` results keep `_id`; other
+  stages expose document IDs as `id` when `idField` is `id`. `$lookup.from` is a collection
+  name.
+- **Capabilities** include all filter, sort, select, offset-pagination, pipeline, and
+  atomic-update features implemented by the adapter.

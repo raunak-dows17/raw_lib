@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRawQl, MemoryAdapter } from "../../src/index";
+import { runAdapterContractTests } from "./adapter-contract";
 
 type User = {
   id: string;
@@ -417,3 +418,5 @@ describe("MemoryAdapter contract", () => {
     if (!result.ok) expect(result.error.code).toBe("VALIDATION_FAILED");
   });
 });
+
+runAdapterContractTests("memory", async () => ({ db: makeDb() }));

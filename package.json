@@ -14,6 +14,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./mongo": {
+      "types": "./dist/mongo/index.d.ts",
+      "import": "./dist/mongo/index.js",
+      "require": "./dist/mongo/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -38,10 +43,20 @@
     "prepublishOnly": "npm run build",
     "release:next": "npm publish --tag next --access public --provenance"
   },
+  "peerDependencies": {
+    "mongodb": ">=6"
+  },
+  "peerDependenciesMeta": {
+    "mongodb": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.1",
+    "mongodb": "^7.9.1",
+    "mongodb-memory-server": "^11.4.0",
     "tsup": "^9.0.0",
     "typescript": "^6.0.3",
     "vitest": "^5.1.1"

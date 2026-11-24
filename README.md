@@ -2,8 +2,8 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0-alpha** — the core engine is implemented; Mongo, validation, and auth
-> land in the next phases. v1 remains available on `main` and npm.
+> Status: **2.0.0-alpha** — the core engine and Mongo adapter are implemented; validation
+> and auth land in the next phases. v1 remains available on `main` and npm.
 
 ## What it is
 
@@ -55,6 +55,38 @@ const page = await users.list({ where: { role: "admin" }, page: { limit: 10 } })
 const one = await users.get({ id: "u_1" });
 ```
 
+## MongoDB
+
+The Mongo adapter lives behind `raw_lib/mongo` and uses the native driver. Install `mongodb`
+as a peer dependency:
+
+```bash
+npm install mongodb
+```
+
+```ts
+import { createRawQl } from "raw_lib";
+import { mongo } from "raw_lib/mongo";
+
+const db = createRawQl({
+  adapter: mongo({
+    uri: process.env.MONGO_URL!,
+    dbName: "app",
+  }),
+  entities: {
+    users: { collection: "users" },
+  },
+});
+
+const users = db.entity<{ id: string; email: string }>("users");
+const result = await users.list({ where: { email: { endsWith: "@acme.com" } } });
+```
+
+With the default `idField: "id"`, the adapter maps `id` to Mongo's `_id` and exposes
+ObjectIds as strings, so the same entity code works against the memory adapter. Use
+`idField: "_id"` to work with raw Mongo documents, or a custom `idField` for your own key.
+Connections are opened lazily; call `db.close()` to release them.
+
 ## Design rules
 
 - Adapters receive a normalized query, never the raw request.
@@ -67,7 +99,7 @@ const one = await users.get({ id: "u_1" });
 | Module                               | State       |
 | ------------------------------------ | ----------- |
 | Core engine + memory adapter         | Implemented |
-| Mongo adapter                        | Next        |
+| Mongo adapter                        | Implemented |
 | RawVal                               | Next        |
 | RawAuth                              | Next        |
 | Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
