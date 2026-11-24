@@ -38,6 +38,9 @@ export type Validator = {
 export type RawQlConfig = {
   adapter: Adapter;
   entities?: EntityRegistry;
+  /** Preferred name for the validation hook. */
+  validate?: Validator;
+  /** Alias kept for early 2.0 alpha builds. */
   validator?: Validator;
   middlewares?: Middleware[];
   defaults?: NormalizeOptions;
@@ -57,7 +60,7 @@ export class RawQl {
 
     this.adapter = config.adapter;
     this.entities = config.entities ?? {};
-    this.validator = config.validator;
+    this.validator = config.validate ?? config.validator;
     this.middlewares = [...(config.middlewares ?? [])];
     this.defaults = config.defaults ?? {};
   }

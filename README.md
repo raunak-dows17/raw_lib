@@ -2,8 +2,8 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0-alpha** — the core engine and Mongo adapter are implemented; validation
-> and auth land in the next phases. v1 remains available on `main` and npm.
+> Status: **2.0.0-alpha** — the core engine, Mongo adapter, and validation are implemented;
+> auth lands in the next phase. v1 remains available on `main` and npm.
 
 ## What it is
 
@@ -87,6 +87,46 @@ ObjectIds as strings, so the same entity code works against the memory adapter. 
 `idField: "_id"` to work with raw Mongo documents, or a custom `idField` for your own key.
 Connections are opened lazily; call `db.close()` to release them.
 
+## Validation
+
+`raw_lib/val` plugs any [Standard Schema](https://standardschema.dev) implementation — zod,
+valibot, arktype — into the query engine, and ships a small zero-dependency builder:
+
+```ts
+import { rawval, v } from "raw_lib/val";
+
+const db = createRawQl({
+  adapter,
+  validate: rawval({
+    users: {
+      create: v.object({
+        email: v.string().email(),
+        age: v.number().int().min(18),
+        role: v.string().default("member"),
+      }),
+      update: v.object({ name: v.string(), age: v.number().int().min(18) }).partial(),
+    },
+  }),
+});
+```
+
+Or reuse an existing schema library:
+
+```ts
+import { z } from "zod";
+
+const db = createRawQl({
+  adapter,
+  validate: rawval({
+    users: { create: z.object({ email: z.string().email() }) },
+  }),
+});
+```
+
+`create`/`update` validate `data`; reads validate the query; `aggregate` validates the
+pipeline. Parsed output replaces `data` before it reaches the adapter. Failures return
+`VALIDATION_FAILED` with `{ path, message, code }` details.
+
 ## Design rules
 
 - Adapters receive a normalized query, never the raw request.
@@ -100,7 +140,7 @@ Connections are opened lazily; call `db.close()` to release them.
 | ------------------------------------ | ----------- |
 | Core engine + memory adapter         | Implemented |
 | Mongo adapter                        | Implemented |
-| RawVal                               | Next        |
+| RawVal                               | Implemented |
 | RawAuth                              | Next        |
 | Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
 

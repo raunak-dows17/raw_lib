@@ -207,3 +207,22 @@ The Mongo adapter (`raw_lib/mongo`) uses the native `mongodb` driver and connect
   name.
 - **Capabilities** include all filter, sort, select, offset-pagination, pipeline, and
   atomic-update features implemented by the adapter.
+
+## 13. RawVal semantics
+
+`raw_lib/val` accepts any Standard Schema v1 implementation and ships a zero-dependency
+builder (`v.string`, `v.number`, `v.object`, `v.array`, `v.record`, `v.union`, `v.date`,
+`v.literal`, `v.enum`, `v.any`, `v.unknown`).
+
+- Schemas are registered per entity and per operation: `rawval({ users: { create, update } })`.
+  Unregistered operations pass through unchanged.
+- `create` and `update` validate `data`; `list`, `get`, `delete`, and `count` validate the
+  query; `aggregate` validates the pipeline.
+- Parsed output replaces `data` for writes, so defaults, coercion, and transforms reach the
+  adapter.
+- Failures become `VALIDATION_FAILED` with `{ path, message, code }[]` details.
+- `v.object` strips unknown keys; `.partial()` makes every field optional; `.extend()` adds
+  fields. `.optional()`, `.nullable()`, `.default()`, `.refine()`, and `.transform()` are
+  available on every schema.
+- `v` schemas expose `~standard.validate`, so they compose with zod, valibot, and arktype
+  schemas inside the same configuration.
