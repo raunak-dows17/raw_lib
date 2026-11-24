@@ -24,6 +24,11 @@
       "import": "./dist/val/index.js",
       "require": "./dist/val/index.cjs"
     },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js",
+      "require": "./dist/auth/index.cjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [

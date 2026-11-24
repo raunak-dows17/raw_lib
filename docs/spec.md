@@ -226,3 +226,36 @@ builder (`v.string`, `v.number`, `v.object`, `v.array`, `v.record`, `v.union`, `
   available on every schema.
 - `v` schemas expose `~standard.validate`, so they compose with zod, valibot, and arktype
   schemas inside the same configuration.
+
+## 14. RawAuth semantics
+
+`raw_lib/auth` implements password authentication and device-bound sessions over RawQL.
+
+- **Configuration.** `createAuth({ db, secret, entities?, accessTtl?, refreshTtl?, password?,
+  fingerprint?, hooks?, clock? })`. `secret` must be at least 16 bytes. Entity names default
+  to `users`, `sessions`, and `otps`; point them at your own collections with `entities`.
+- **Flows.** `register`, `login.password`, `refresh`, `verify`, `logout`, `logoutAll`,
+  `sessions.list`, and `sessions.revoke`. Every flow returns a `Result`; failures use the auth
+  error codes from section 8.
+- **Access tokens.** Compact HS256 JWTs with `sub`, `sid`, `jti`, `iat`, `exp`, and optional
+  `roles`, signed through Web Crypto. Default TTL is 15 minutes.
+- **Refresh tokens.** 32 random bytes encoded as base64url. Only the SHA-256 hash is stored on
+  the session. Every refresh rotates the token; the previous hashes are retained (default 20)
+  so reuse is detectable. Reuse revokes every active session in the token family.
+- **Sessions.** Each session records `familyId`, hashed device fingerprint fields, `createdAt`,
+  `lastUsedAt`, `expiresAt`, `revokedAt`, `rotation`, and refresh-token expiry. Public session
+  objects never include token hashes.
+- **Device fingerprinting.** `strict` (default) requires the bound device ID to match, falling
+  back to the user agent only when no device ID was bound. `loose` accepts either match. `off`
+  disables the check. A session created without a fingerprint is unbound; once bound, missing
+  or different devices are rejected. `requireDeviceId` rejects session creation without one.
+- **Passwords.** Default `scrypt` with N=2^15, r=8, p=1 and a random salt, using `node:crypto`
+  when available and PBKDF2-SHA256 through Web Crypto otherwise. `password.hasher` accepts a
+  custom `{ hash, verify }` implementation. Minimum length defaults to 8.
+- **Enumeration and timing.** Unknown users and wrong passwords return the same
+  `INVALID_CREDENTIALS` error, and unknown users still incur a dummy hash comparison.
+- **Hooks.** `onLogin`, `onLoginFailed`, `onSessionRevoked`, and `onRefreshReuse` receive audit
+  context. Hook failures are swallowed so they can never change an auth outcome.
+- **Limitations.** OTP flows and delivery providers are not implemented yet. The auth layer
+  does not create database unique indexes; add them on identifier columns to enforce
+  registration uniqueness under concurrency.

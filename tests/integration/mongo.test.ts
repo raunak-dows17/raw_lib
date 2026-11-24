@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRawQl } from "../../src/index";
+import { createAuth } from "../../src/auth";
 import { MongoAdapter, mongo } from "../../src/mongo";
 import { contractSeed, runAdapterContractTests } from "../contract/adapter-contract";
 
@@ -281,5 +282,56 @@ describe("mongodb adapter specifics", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("ADAPTER_ERROR");
+  });
+});
+
+describe("mongodb auth integration", () => {
+  it("runs password auth, rotation, and reuse revocation", async () => {
+    const adapter = mongo({ uri: server.getUri(), dbName: uniqueDbName() });
+    const db = createRawQl({ adapter });
+    const auth = createAuth({ db, secret: "mongo-auth-secret-0123456789" });
+
+    const registered = await auth.register({
+      email: "Mongo@Acme.com",
+      password: "password123",
+      device: { deviceId: "device-1" },
+    });
+
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+
+    const login = await auth.login.password({
+      identifier: "mongo@acme.com",
+      password: "password123",
+      device: { deviceId: "device-1" },
+    });
+    expect(login.ok).toBe(true);
+    if (!login.ok) return;
+
+    const verified = await auth.verify({
+      accessToken: login.data.accessToken,
+      device: { deviceId: "device-1" },
+    });
+    expect(verified.ok).toBe(true);
+
+    const refreshed = await auth.refresh({
+      refreshToken: login.data.refreshToken,
+      device: { deviceId: "device-1" },
+    });
+    expect(refreshed.ok).toBe(true);
+    if (!refreshed.ok) return;
+
+    const replay = await auth.refresh({ refreshToken: login.data.refreshToken });
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.error.code).toBe("TOKEN_INVALID");
+
+    const afterReuse = await auth.refresh({ refreshToken: refreshed.data.refreshToken });
+    expect(afterReuse.ok).toBe(false);
+    if (!afterReuse.ok) expect(afterReuse.error.code).toBe("SESSION_REVOKED");
+
+    const sessions = await auth.sessions.list({ userId: registered.data.user.id });
+    expect(sessions.ok && sessions.data.length).toBe(2);
+
+    await adapter.close();
   });
 });

@@ -2,8 +2,9 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0-alpha** — the core engine, Mongo adapter, and validation are implemented;
-> auth lands in the next phase. v1 remains available on `main` and npm.
+> Status: **2.0.0-alpha** — the core engine, Mongo adapter, validation, and password auth are
+> implemented; OTP and delivery providers land in the next phase. v1 remains available on
+> `main` and npm.
 
 ## What it is
 
@@ -127,6 +128,56 @@ const db = createRawQl({
 pipeline. Parsed output replaces `data` before it reaches the adapter. Failures return
 `VALIDATION_FAILED` with `{ path, message, code }` details.
 
+## Authentication
+
+`raw_lib/auth` builds password auth, device-bound sessions, and access/refresh tokens on top of
+RawQL, so users and sessions live in whichever adapter you already use:
+
+```ts
+import { createRawQl } from "raw_lib";
+import { createAuth } from "raw_lib/auth";
+
+const db = createRawQl({
+  adapter,
+  entities: {
+    users: { collection: "users" },
+    sessions: { collection: "sessions" },
+    otps: { collection: "otps" },
+  },
+});
+
+const auth = createAuth({
+  db,
+  secret: process.env.AUTH_SECRET!, // at least 16 bytes
+  accessTtl: "15m",
+  refreshTtl: "30d",
+  fingerprint: { policy: "strict" },
+});
+
+const device = { deviceId: "install-id", userAgent: request.headers["user-agent"] };
+
+const registered = await auth.register({ email, password, device });
+if (!registered.ok) throw new Error(registered.error.message);
+
+const { accessToken, refreshToken } = registered.data;
+const session = await auth.verify({ accessToken, device });
+const rotated = await auth.refresh({ refreshToken, device });
+await auth.logout({ refreshToken });
+```
+
+- Access tokens are HS256 JWTs signed with Web Crypto, so the token layer is edge-safe and
+  dependency-free.
+- Refresh tokens are opaque 32-byte values stored only as SHA-256 hashes and rotated on every
+  use. Reusing a rotated token revokes the whole session family.
+- Sessions bind to a hashed device fingerprint. `strict` (default) requires the bound device;
+  `loose` accepts a matching device ID or user agent; `off` is an explicit opt-out. Missing
+  fingerprints never fail open once a session is bound.
+- Passwords use `scrypt` (N=2^15) through `node:crypto`, with a PBKDF2 Web Crypto fallback and a
+  pluggable `PasswordHasher` for bcrypt or argon2.
+- `auth.sessions.list`, `auth.sessions.revoke`, `auth.logoutAll`, and hooks such as
+  `onLoginFailed` and `onSessionRevoked` cover session administration and auditing.
+- OTP login and delivery providers land in the next phase.
+
 ## Design rules
 
 - Adapters receive a normalized query, never the raw request.
@@ -141,7 +192,8 @@ pipeline. Parsed output replaces `data` before it reaches the adapter. Failures 
 | Core engine + memory adapter         | Implemented |
 | Mongo adapter                        | Implemented |
 | RawVal                               | Implemented |
-| RawAuth                              | Next        |
+| RawAuth                              | Implemented |
+| OTP + delivery providers             | Next        |
 | Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
 
 See [`docs/spec.md`](docs/spec.md) for the protocol and [`docs/adr`](docs/adr) for design decisions.
