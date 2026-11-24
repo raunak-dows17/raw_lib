@@ -259,3 +259,29 @@ builder (`v.string`, `v.number`, `v.object`, `v.array`, `v.record`, `v.union`, `
 - **Limitations.** OTP flows and delivery providers are not implemented yet. The auth layer
   does not create database unique indexes; add them on identifier columns to enforce
   registration uniqueness under concurrency.
+
+## 15. OTP login semantics
+
+- **Configuration.** `otp: { length?, ttl?, maxAttempts?, provider?, rateLimit? }`. Codes are
+  4–10 digits (default 6), live for 5 minutes by default, and lock after 5 failed attempts.
+  Requests default to 5 per contact per 15 minutes; pass `rateLimit: false` to disable.
+- **Request.** `auth.login.otp.request({ contact, purpose?, channel? })` normalizes the contact,
+  detects `email` (contains `@`) or `sms`, and returns `{ otpId, expiresAt, channel }`.
+  Unknown contacts receive the same response without a message being sent, so the endpoint does
+  not reveal whether an account exists.
+- **Storage.** OTP records keep an HMAC-SHA256 `contactHash` (never the raw contact), a random
+  salt, the salted HMAC-SHA256 `codeHash`, the linked `userId` when known, timestamps, and
+  attempt counters. Codes are generated with `crypto.getRandomValues` and rejection sampling.
+- **Verification.** `auth.login.otp.verify({ otpId, code, device? })` checks expiry, consumption,
+  and attempt limits, compares digests in constant time, consumes the code atomically through a
+  conditional update, and then issues a normal session and token pair. Failures use
+  `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ATTEMPTS_EXCEEDED`, `OTP_ALREADY_USED`, or `RATE_LIMITED`.
+- **Providers.** `OtpProvider.send({ code, contact, channel, purpose })` returns
+  `{ ok, providerId?, error? }`. Built-ins: `twilio()` for SMS, `sendgrid()` for email, and
+  `otpRouter({ sms, email })` for channel routing. All use `fetch` and accept an injected
+  implementation.
+- **Hooks.** `onOtpSent` receives `{ otpId, channel, purpose, providerId? }` and `onOtpFailed`
+  receives `{ otpId?, channel?, purpose?, reason }`. Hook failures never alter outcomes.
+- **Limitations.** OTP login requires an existing user; there is no auto-registration flow.
+  Attempt increments are read-modify-write rather than an atomic counter. Expired OTP records
+  are not garbage-collected automatically.

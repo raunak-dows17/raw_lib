@@ -11,6 +11,7 @@ import {
   hashDevice,
   type StoredFingerprint,
 } from "./fingerprint";
+import { constantTimeHexEqual, generateOtpCode, hashContact, hashOtpCode } from "./otp";
 import { defaultPasswordHasher, type PasswordHasher } from "./password";
 import { parseDuration, toSeconds } from "./time";
 import { type AccessClaims, signAccessToken, verifyAccessToken } from "./tokens";
@@ -21,6 +22,10 @@ import type {
   AuthHooks,
   AuthSuccess,
   Identifier,
+  Otp,
+  OtpChannel,
+  OtpPurpose,
+  OtpRequestSuccess,
   PublicSession,
   PublicUser,
   Session,
@@ -71,6 +76,24 @@ function normalizeUsername(username?: string | null): string | undefined {
 
 function describeIdentifier(identifier: Identifier): string | undefined {
   return typeof identifier === "string" ? identifier : undefined;
+}
+
+function normalizeContact(contact: string): string {
+  if (typeof contact !== "string") {
+    throw new RawLibError("VALIDATION_FAILED", "`contact` must be a string");
+  }
+
+  const value = contact.trim();
+  if (!value) {
+    throw new RawLibError("VALIDATION_FAILED", "`contact` must not be empty");
+  }
+
+  return value.includes("@") ? value.toLowerCase() : value;
+}
+
+function contactChannel(contact: string, channel?: OtpChannel): OtpChannel {
+  if (channel) return channel;
+  return contact.includes("@") ? "email" : "sms";
 }
 
 function identifierWhere(identifier: Identifier): Where<any> | null {
@@ -143,6 +166,26 @@ export function createAuth(config: AuthConfig): Auth {
   const accessTtlMs = parseDuration(config.accessTtl ?? "15m");
   const refreshTtlMs = parseDuration(config.refreshTtl ?? "30d");
   const accessTtlSeconds = toSeconds(accessTtlMs);
+
+  const otpLength = config.otp?.length ?? 6;
+  if (!Number.isInteger(otpLength) || otpLength < 4 || otpLength > 10) {
+    throw new RawLibError("VALIDATION_FAILED", "`otp.length` must be between 4 and 10");
+  }
+
+  const otpTtlMs = parseDuration(config.otp?.ttl ?? "5m");
+  const otpMaxAttempts = config.otp?.maxAttempts ?? 5;
+  if (!Number.isInteger(otpMaxAttempts) || otpMaxAttempts < 1) {
+    throw new RawLibError("VALIDATION_FAILED", "`otp.maxAttempts` must be a positive integer");
+  }
+
+  const otpProvider = config.otp?.provider;
+  const otpRateLimit =
+    config.otp?.rateLimit === false
+      ? null
+      : {
+          window: parseDuration(config.otp?.rateLimit?.window ?? "15m"),
+          max: config.otp?.rateLimit?.max ?? 5,
+        };
 
   let dummyHash: Promise<string> | undefined;
 
@@ -218,6 +261,18 @@ export function createAuth(config: AuthConfig): Auth {
 
     if (!result.ok) return null;
     return result.data[0] ?? null;
+  }
+
+  async function findOtp(id: string): Promise<Otp | null> {
+    const result = await db.execute<Otp | null>({
+      op: "get",
+      entity: entities.otps,
+      where: { id },
+    });
+
+    if (!result.ok) throw new RawLibError(result.error.code, result.error.message);
+
+    return result.data ?? null;
   }
 
   function assertLiveSession(session: Session): void {
@@ -455,6 +510,181 @@ export function createAuth(config: AuthConfig): Auth {
 
           return { ok: true, data: await createSession(user, input.device) };
         });
+      },
+
+      otp: {
+        request(input) {
+          return run<OtpRequestSuccess>(async () => {
+            if (!otpProvider) {
+              throw new RawLibError("INTERNAL_ERROR", "OTP provider is not configured");
+            }
+
+            const contact = normalizeContact(input.contact);
+            const channel = contactChannel(contact, input.channel);
+            const purpose: OtpPurpose = input.purpose ?? "login";
+
+            if (channel === "email" && !contact.includes("@")) {
+              throw new RawLibError("VALIDATION_FAILED", "Invalid email contact");
+            }
+
+            const contactHash = await hashContact(secret, contact);
+
+            if (otpRateLimit) {
+              const windowStart = new Date(now().getTime() - otpRateLimit.window).toISOString();
+              const recent = await db.execute<number>({
+                op: "count",
+                entity: entities.otps,
+                where: { contactHash, createdAt: { gte: windowStart } },
+              });
+
+              if (!recent.ok) return failure(recent.error);
+              if (recent.data >= otpRateLimit.max) {
+                throw new RawLibError("RATE_LIMITED", "Too many verification code requests");
+              }
+            }
+
+            const user = await findUser(
+              channel === "email" ? { email: contact } : { phone: contact },
+            );
+
+            const createdAt = now();
+            const code = generateOtpCode(otpLength);
+            const salt = randomToken(16);
+            const otp: Otp = {
+              id: randomId(),
+              userId: user?.id ?? null,
+              contactHash,
+              channel,
+              purpose,
+              codeHash: await hashOtpCode(secret, salt, code),
+              salt,
+              createdAt: createdAt.toISOString(),
+              expiresAt: new Date(createdAt.getTime() + otpTtlMs).toISOString(),
+              attempts: 0,
+              maxAttempts: otpMaxAttempts,
+              consumedAt: null,
+            };
+
+            const inserted = await db.execute<Otp>({
+              op: "create",
+              entity: entities.otps,
+              data: otp,
+            });
+
+            if (!inserted.ok) return failure(inserted.error);
+
+            // Unknown contacts get the same response shape but no message is sent.
+            if (!user) {
+              return {
+                ok: true,
+                data: { otpId: otp.id, expiresAt: otp.expiresAt, channel },
+              };
+            }
+
+            const sent = await otpProvider.send({ code, contact, channel, purpose });
+
+            if (!sent.ok) {
+              await db.execute({
+                op: "update",
+                entity: entities.otps,
+                where: { id: otp.id },
+                data: { consumedAt: nowIso() },
+              });
+
+              await safeHook(() =>
+                hooks.onOtpFailed?.({
+                  otpId: otp.id,
+                  channel,
+                  purpose,
+                  reason: "send_failed",
+                }),
+              );
+
+              throw new RawLibError("INTERNAL_ERROR", "Failed to send verification code");
+            }
+
+            await safeHook(() =>
+              hooks.onOtpSent?.({
+                otpId: otp.id,
+                channel,
+                purpose,
+                ...(sent.providerId ? { providerId: sent.providerId } : {}),
+              }),
+            );
+
+            return {
+              ok: true,
+              data: { otpId: otp.id, expiresAt: otp.expiresAt, channel },
+            };
+          });
+        },
+
+        verify(input) {
+          return run<AuthSuccess>(async () => {
+            const otp = await findOtp(input.otpId);
+            if (!otp) throw new RawLibError("OTP_INVALID", "Invalid verification code");
+
+            if (otp.consumedAt) {
+              throw new RawLibError("OTP_ALREADY_USED", "Verification code has already been used");
+            }
+
+            if (Date.parse(otp.expiresAt) <= now().getTime()) {
+              throw new RawLibError("OTP_EXPIRED", "Verification code has expired");
+            }
+
+            if ((otp.attempts ?? 0) >= otp.maxAttempts) {
+              throw new RawLibError("OTP_ATTEMPTS_EXCEEDED", "Too many verification attempts");
+            }
+
+            if (typeof input.code !== "string" || input.code.length === 0) {
+              throw new RawLibError("OTP_INVALID", "Invalid verification code");
+            }
+
+            const expected = await hashOtpCode(secret, otp.salt, input.code);
+
+            if (!constantTimeHexEqual(expected, otp.codeHash)) {
+              const attempts = (otp.attempts ?? 0) + 1;
+
+              await db.execute({
+                op: "update",
+                entity: entities.otps,
+                where: { id: otp.id },
+                data: { attempts },
+              });
+
+              await safeHook(() =>
+                hooks.onOtpFailed?.({
+                  otpId: otp.id,
+                  channel: otp.channel,
+                  purpose: otp.purpose,
+                  reason: "invalid_code",
+                }),
+              );
+
+              if (attempts >= otp.maxAttempts) {
+                throw new RawLibError("OTP_ATTEMPTS_EXCEEDED", "Too many verification attempts");
+              }
+
+              throw new RawLibError("OTP_INVALID", "Invalid verification code");
+            }
+
+            const consumed = await db.execute({
+              op: "update",
+              entity: entities.otps,
+              where: { id: otp.id, consumedAt: { isNull: true } },
+              data: { consumedAt: nowIso() },
+            });
+
+            if (!consumed.ok) {
+              throw new RawLibError("OTP_ALREADY_USED", "Verification code has already been used");
+            }
+
+            const user = otp.userId ? await findUserById(otp.userId) : null;
+            if (!user) throw new RawLibError("OTP_INVALID", "Invalid verification code");
+
+            return { ok: true, data: await createSession(user, input.device) };
+          });
+        },
       },
     },
 

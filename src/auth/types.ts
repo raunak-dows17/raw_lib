@@ -79,6 +79,70 @@ export type VerifyInput = {
   device?: Device;
 };
 
+export type OtpPurpose = "login" | "verify";
+
+export type OtpChannel = "sms" | "email";
+
+export type Otp = {
+  id: string;
+  userId?: string | null;
+  contactHash: string;
+  channel: OtpChannel;
+  purpose: OtpPurpose;
+  codeHash: string;
+  salt: string;
+  createdAt: string;
+  expiresAt: string;
+  attempts: number;
+  maxAttempts: number;
+  consumedAt?: string | null;
+};
+
+export type OtpSendResult = {
+  ok: boolean;
+  providerId?: string;
+  error?: string;
+};
+
+export type OtpProvider = {
+  send(input: {
+    code: string;
+    contact: string;
+    channel: OtpChannel;
+    purpose: OtpPurpose;
+  }): Promise<OtpSendResult>;
+};
+
+export type OtpConfig = {
+  /** Number of digits in generated codes. Defaults to 6. */
+  length?: number;
+  /** Code lifetime. Defaults to `5m`. */
+  ttl?: string | number;
+  /** Failed verification attempts before a code is locked. Defaults to 5. */
+  maxAttempts?: number;
+  provider?: OtpProvider;
+  /** Per-contact request throttle. Defaults to 5 requests per 15 minutes. */
+  rateLimit?: { window?: string | number; max?: number } | false;
+};
+
+export type OtpRequestInput = {
+  contact: string;
+  purpose?: OtpPurpose;
+  channel?: OtpChannel;
+};
+
+export type OtpRequestSuccess = {
+  otpId: string;
+  expiresAt: string;
+  channel: OtpChannel;
+};
+
+export type OtpVerifyInput = {
+  otpId: string;
+  code: string;
+  device?: Device;
+};
+
 export type LogoutInput = {
   refreshToken?: string;
   sessionId?: string;
@@ -107,6 +171,18 @@ export type AuthHooks = {
   }) => void | Promise<void>;
   onSessionRevoked?: (context: { session: PublicSession; reason: string }) => void | Promise<void>;
   onRefreshReuse?: (context: { session: PublicSession }) => void | Promise<void>;
+  onOtpSent?: (context: {
+    otpId: string;
+    channel: OtpChannel;
+    purpose: OtpPurpose;
+    providerId?: string;
+  }) => void | Promise<void>;
+  onOtpFailed?: (context: {
+    otpId?: string;
+    channel?: OtpChannel;
+    purpose?: OtpPurpose;
+    reason: string;
+  }) => void | Promise<void>;
 };
 
 export type AuthEntityNames = {
@@ -126,6 +202,7 @@ export type AuthConfig = {
   refreshTtl?: string | number;
   password?: PasswordConfig;
   fingerprint?: FingerprintConfig;
+  otp?: OtpConfig;
   hooks?: AuthHooks;
   /** Injectable clock for deterministic tests. */
   clock?: () => Date;
@@ -137,6 +214,10 @@ export type Auth = {
   register(input: RegisterInput): Promise<Result<AuthSuccess>>;
   login: {
     password(input: PasswordLoginInput): Promise<Result<AuthSuccess>>;
+    otp: {
+      request(input: OtpRequestInput): Promise<Result<OtpRequestSuccess>>;
+      verify(input: OtpVerifyInput): Promise<Result<AuthSuccess>>;
+    };
   };
   refresh(input: RefreshInput): Promise<Result<AuthSuccess>>;
   verify(input: VerifyInput): Promise<Result<VerifySuccess>>;

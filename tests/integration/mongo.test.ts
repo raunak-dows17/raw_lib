@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createRawQl } from "../../src/index";
 import { createAuth } from "../../src/auth";
+import { createRawQl } from "../../src/index";
 import { MongoAdapter, mongo } from "../../src/mongo";
 import { contractSeed, runAdapterContractTests } from "../contract/adapter-contract";
 
@@ -331,6 +331,48 @@ describe("mongodb auth integration", () => {
 
     const sessions = await auth.sessions.list({ userId: registered.data.user.id });
     expect(sessions.ok && sessions.data.length).toBe(2);
+
+    await adapter.close();
+  });
+});
+
+describe("mongodb otp integration", () => {
+  it("requests, consumes, and locks one-time codes", async () => {
+    const adapter = mongo({ uri: server.getUri(), dbName: uniqueDbName() });
+    const db = createRawQl({ adapter });
+    let delivered = "";
+    const auth = createAuth({
+      db,
+      secret: "mongo-otp-secret-0123456789",
+      otp: {
+        provider: {
+          async send(input) {
+            delivered = input.code;
+            return { ok: true, providerId: "fake" };
+          },
+        },
+        rateLimit: false,
+      },
+    });
+
+    await auth.register({ email: "otp@acme.com", password: "password123" });
+
+    const request = await auth.login.otp.request({ contact: "otp@acme.com" });
+    expect(request.ok).toBe(true);
+    if (!request.ok) return;
+
+    const verify = await auth.login.otp.verify({
+      otpId: request.data.otpId,
+      code: delivered,
+    });
+    expect(verify.ok).toBe(true);
+
+    const replay = await auth.login.otp.verify({
+      otpId: request.data.otpId,
+      code: delivered,
+    });
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.error.code).toBe("OTP_ALREADY_USED");
 
     await adapter.close();
   });

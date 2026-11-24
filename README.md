@@ -2,9 +2,9 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0-alpha** — the core engine, Mongo adapter, validation, and password auth are
-> implemented; OTP and delivery providers land in the next phase. v1 remains available on
-> `main` and npm.
+> Status: **2.0.0-alpha** — the core engine, Mongo adapter, validation, password auth, and OTP
+> login are implemented; packaging, examples, and the 2.0.0 release land next. v1 remains
+> available on `main` and npm.
 
 ## What it is
 
@@ -176,7 +176,43 @@ await auth.logout({ refreshToken });
   pluggable `PasswordHasher` for bcrypt or argon2.
 - `auth.sessions.list`, `auth.sessions.revoke`, `auth.logoutAll`, and hooks such as
   `onLoginFailed` and `onSessionRevoked` cover session administration and auditing.
-- OTP login and delivery providers land in the next phase.
+
+### OTP login
+
+```ts
+import { createAuth, otpRouter, sendgrid, twilio } from "raw_lib/auth";
+
+const auth = createAuth({
+  db,
+  secret: process.env.AUTH_SECRET!,
+  otp: {
+    ttl: "5m",
+    maxAttempts: 5,
+    provider: otpRouter({
+      sms: twilio({
+        accountSid: process.env.TWILIO_SID!,
+        authToken: process.env.TWILIO_TOKEN!,
+        from: process.env.TWILIO_FROM!,
+      }),
+      email: sendgrid({ apiKey: process.env.SENDGRID_KEY!, from: "noreply@acme.com" }),
+    }),
+  },
+});
+
+const requested = await auth.login.otp.request({ contact: "ada@acme.com" });
+if (!requested.ok) throw new Error(requested.error.message);
+
+const login = await auth.login.otp.verify({
+  otpId: requested.data.otpId,
+  code: submittedCode,
+  device,
+});
+```
+
+Codes are numeric, generated with Web Crypto, stored as salted HMAC-SHA256 digests, and
+consumed exactly once. Requests are throttled per contact, attempts are capped, and unknown
+contacts receive the same response shape without a message being sent. Both providers use
+`fetch`, so they work on Node 18+, edge runtimes, and with injected test doubles.
 
 ## Design rules
 
@@ -193,7 +229,8 @@ await auth.logout({ refreshToken });
 | Mongo adapter                        | Implemented |
 | RawVal                               | Implemented |
 | RawAuth                              | Implemented |
-| OTP + delivery providers             | Next        |
+| OTP + delivery providers             | Implemented |
+| Packaging, docs, examples, 2.0.0     | Next        |
 | Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
 
 See [`docs/spec.md`](docs/spec.md) for the protocol and [`docs/adr`](docs/adr) for design decisions.
