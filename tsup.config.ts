@@ -1,0 +1,18 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: {
+    index: "src/index.ts",
+    "mongo/index": "src/mongo/index.ts",
+    "val/index": "src/val/index.ts",
+    "auth/index": "src/auth/index.ts",
+    "agent/index": "src/agent/index.ts",
+  },
+  format: ["esm", "cjs"],
+  dts: true,
+  sourcemap: true,
+  clean: true,
+  splitting: false,
+  treeshake: true,
+  target: "node18",
+});
