@@ -1,6 +1,6 @@
 {
   "name": "raw_lib",
-  "version": "2.1.1",
+  "version": "2.1.1.0",
   "description": "Modular, adapter-driven query, validation and authentication toolkit for Node.js",
   "license": "MIT",
   "author": "Raunak Pandey",
