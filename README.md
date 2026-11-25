@@ -2,8 +2,8 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.1.0** — core, Mongo, validation, auth, OTP, and the policy-enforced
-> `raw_lib/agent` data agent are complete. v1 remains available on `main` and npm.
+> Status: **2.1.1** — core, Mongo, validation, auth, OTP, and the policy-enforced
+> `raw_lib/agent` data agent are complete.
 
 See [`MIGRATION.md`](MIGRATION.md) if you are upgrading from 1.x, [`CHANGELOG.md`](CHANGELOG.md)
 for the release notes, and [`examples`](examples) for Express, Fastify, Hono, MCP, and the
@@ -53,9 +53,17 @@ if (result.ok) {
 Typed entity helpers use the same protocol:
 
 ```ts
-const users = db.entity<{ id: string; name: string; role: string; age: number }>("users");
+const users = db.entity<{
+  id: string;
+  name: string;
+  role: string;
+  age: number;
+}>("users");
 
-const page = await users.list({ where: { role: "admin" }, page: { limit: 10 } });
+const page = await users.list({
+  where: { role: "admin" },
+  page: { limit: 10 },
+});
 const one = await users.get({ id: "u_1" });
 ```
 
@@ -83,7 +91,9 @@ const db = createRawQl({
 });
 
 const users = db.entity<{ id: string; email: string }>("users");
-const result = await users.list({ where: { email: { endsWith: "@acme.com" } } });
+const result = await users.list({
+  where: { email: { endsWith: "@acme.com" } },
+});
 ```
 
 With the default `idField: "id"`, the adapter maps `id` to Mongo's `_id` and exposes
@@ -157,7 +167,10 @@ const auth = createAuth({
   fingerprint: { policy: "strict" },
 });
 
-const device = { deviceId: "install-id", userAgent: request.headers["user-agent"] };
+const device = {
+  deviceId: "install-id",
+  userAgent: request.headers["user-agent"],
+};
 
 const registered = await auth.register({ email, password, device });
 if (!registered.ok) throw new Error(registered.error.message);
@@ -197,7 +210,10 @@ const auth = createAuth({
         authToken: process.env.TWILIO_TOKEN!,
         from: process.env.TWILIO_FROM!,
       }),
-      email: sendgrid({ apiKey: process.env.SENDGRID_KEY!, from: "noreply@acme.com" }),
+      email: sendgrid({
+        apiKey: process.env.SENDGRID_KEY!,
+        from: "noreply@acme.com",
+      }),
     }),
   },
 });
@@ -240,7 +256,11 @@ const agent = createDataAgent({
       },
     },
     orders: {
-      fields: { id: { type: "string" }, userId: { type: "string" }, total: { type: "number" } },
+      fields: {
+        id: { type: "string" },
+        userId: { type: "string" },
+        total: { type: "number" },
+      },
     },
   },
   policy: {
