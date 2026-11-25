@@ -2,11 +2,12 @@
 
 Modular, adapter-driven query, validation, and authentication toolkit for Node.js.
 
-> Status: **2.0.0** — the core engine, Mongo adapter, validation, password and OTP auth,
-> examples, and migration guide are complete. v1 remains available on `main` and npm.
+> Status: **2.1.0** — core, Mongo, validation, auth, OTP, and the policy-enforced
+> `raw_lib/agent` data agent are complete. v1 remains available on `main` and npm.
 
 See [`MIGRATION.md`](MIGRATION.md) if you are upgrading from 1.x, [`CHANGELOG.md`](CHANGELOG.md)
-for the release notes, and [`examples`](examples) for Express, Fastify, and Hono servers.
+for the release notes, and [`examples`](examples) for Express, Fastify, Hono, MCP, and the
+agent console.
 
 ## What it is
 
@@ -216,6 +217,82 @@ consumed exactly once. Requests are throttled per contact, attempts are capped, 
 contacts receive the same response shape without a message being sent. Both providers use
 `fetch`, so they work on Node 18+, edge runtimes, and with injected test doubles.
 
+## Agent
+
+`raw_lib/agent` is a policy-enforced natural-language interface to the same typed data layer.
+The model emits a `Query`, never SQL or a Mongo pipeline; the runtime validates and guards it
+before anything executes.
+
+```ts
+import { createRawQl } from "raw_lib";
+import { createDataAgent, openai } from "raw_lib/agent";
+
+const agent = createDataAgent({
+  db,
+  entities: {
+    users: {
+      description: "Customer accounts",
+      fields: {
+        id: { type: "string" },
+        email: { type: "string" },
+        plan: { type: "string", values: ["free", "pro", "enterprise"] },
+        tenantId: { type: "string" },
+      },
+    },
+    orders: {
+      fields: { id: { type: "string" }, userId: { type: "string" }, total: { type: "number" } },
+    },
+  },
+  policy: {
+    allowOps: ["list", "count", "aggregate"],
+    tenantScope: (context) => ({ tenantId: context.tenant }),
+    redactFields: { users: ["email"] },
+    maxLimit: 50,
+  },
+  model: openai({ apiKey: process.env.OPENAI_API_KEY!, model: "gpt-4.1-mini" }),
+});
+
+const result = await agent.run("Which plan has the most churned accounts?", {
+  tenant: "t1",
+  actor: "ops",
+});
+
+if (result.ok) {
+  result.data.answer; // model summary
+  result.data.query; // the exact guarded query
+  result.data.data; // redacted rows
+  result.data.citations; // entities, counts, ids
+  result.data.audit; // policy decisions and usage
+}
+```
+
+Guardrails are enforced in code, not in the prompt:
+
+- Read-only by default (`list`, `get`, `count`, `aggregate`); writes need an explicit
+  `allowOps` entry **and** an `approve` callback.
+- Entity allowlists, field deny lists, and PII redaction.
+- Server-side `tenantScope` injected into every filter and aggregation.
+- Page, row, pipeline-stage, tool-call, token, and timeout budgets.
+- Typed AST only: unknown operators, stages, and raw regex are rejected.
+- Audit records stored through RawQL itself, with PII scrubbed from stored queries.
+
+`mockModel` makes the entire loop deterministic in tests and CI. `openai`, `anthropic`, and
+`ollama` adapters use native tool calling over `fetch`, so there are no model SDK dependencies.
+
+The eval harness measures execution accuracy, schema validity, unsafe-query rate, repair rate,
+latency, and token cost:
+
+```ts
+import { runEval } from "raw_lib/agent";
+
+const report = await runEval({ agent, dataset });
+console.log(report.metrics);
+```
+
+See [`examples/agent-console`](examples/agent-console) for a zero-key terminal demo,
+[`examples/agent-eval`](examples/agent-eval) for the eval runner and golden/adversarial
+datasets, and [`examples/mcp-server`](examples/mcp-server) for the read-only MCP server.
+
 ## Examples
 
 [`examples`](examples) contains the same API — register, login, refresh, logout, `/me`, and a
@@ -247,8 +324,9 @@ the same.
 | RawVal                               | Implemented |
 | RawAuth                              | Implemented |
 | OTP + delivery providers             | Implemented |
-| Packaging, docs, examples, 2.0.0     | Implemented |
-| Agentic data layer (`raw_lib/agent`) | Post-2.0.0  |
+| Packaging, docs, examples, 2.1.0     | Implemented |
+| Agentic data layer (`raw_lib/agent`) | Implemented |
+| SQL/Redis adapters, RBAC, OAuth      | Post-2.1    |
 
 See [`docs/spec.md`](docs/spec.md) for the protocol and [`docs/adr`](docs/adr) for design decisions.
 

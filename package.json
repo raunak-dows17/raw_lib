@@ -1,6 +1,6 @@
 {
   "name": "raw_lib",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Modular, adapter-driven query, validation and authentication toolkit for Node.js",
   "license": "MIT",
   "author": "Raunak Pandey",
@@ -36,6 +36,11 @@
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.js",
       "require": "./dist/auth/index.cjs"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "require": "./dist/agent/index.cjs"
     },
     "./package.json": "./package.json"
   },

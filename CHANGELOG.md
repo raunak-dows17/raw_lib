@@ -3,6 +3,41 @@
 All notable changes to `raw_lib`. The format follows [Keep a Changelog](https://keepachangelog.com/)
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-25
+
+Adds the optional, zero-dependency `raw_lib/agent` subpath: a policy-enforced natural-language
+interface to RawQL. The model emits a typed query; deterministic code guards and executes it.
+
+### Added
+
+- **Data agent** — `createDataAgent` with a bounded `discover → plan → guard → execute → repair
+  → answer` loop, citations, policy decisions, and per-run stats.
+- **Guarded tools** — `defineAgentTools` exposes `describe_entity`, `query`, `aggregate`, and
+  `explain` with JSON schemas and typed execution.
+- **Policy engine** — read-only defaults, entity allowlists, field deny/redaction lists,
+  server-side tenant scoping, page/row/pipeline/tool/token/time budgets, and approval-gated
+  writes.
+- **Audit store** — `createAuditStore` persists runs through RawQL and scrubs PII from stored
+  queries.
+- **Model adapters** — `openai`, `anthropic`, and `ollama` over native tool calling and `fetch`,
+  plus deterministic `mockModel` for tests and CI.
+- **Eval harness** — `runEval` reports execution accuracy, schema validity, unsafe-query rate,
+  repair rate, refusal rate, p50/p95 latency, tokens, and optional cost, with normalized query
+  comparison and result invariants.
+- **Examples** — agent console, eval runner with golden/adversarial datasets, and a read-only
+  MCP server.
+
+### Security
+
+- Forbidden operations are never executed; the model only sees a typed error.
+- Tenant scope is injected after the model produces a query.
+- `denyFields` blocks selection and filtering; `redactFields` masks results before they reach
+  the model.
+- Raw regex, unknown operators, unknown pipeline stages, and unapproved lookup targets are
+  rejected.
+- Audit queries replace email, phone, password, token, secret, and OTP values with
+  `[redacted]`.
+
 ## [2.0.0] - 2026-11-24
 
 The first release of the rewritten toolkit. 1.x remains available on the `main` branch and the
@@ -61,3 +96,4 @@ The first release of the rewritten toolkit. 1.x remains available on the `main` 
 - The 1.x `rawql/*`, `rawval/*`, and `rawauth/*` deep imports.
 
 [2.0.0]: https://github.com/raunak-dows17/raw_lib/releases/tag/v2.0.0
+[2.1.0]: https://github.com/raunak-dows17/raw_lib/releases/tag/v2.1.0

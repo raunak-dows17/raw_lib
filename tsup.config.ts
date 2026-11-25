@@ -6,6 +6,7 @@ export default defineConfig({
     "mongo/index": "src/mongo/index.ts",
     "val/index": "src/val/index.ts",
     "auth/index": "src/auth/index.ts",
+    "agent/index": "src/agent/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

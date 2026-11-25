@@ -289,3 +289,100 @@ builder (`v.string`, `v.number`, `v.object`, `v.array`, `v.record`, `v.union`, `
 - **Limitations.** OTP login requires an existing user; there is no auto-registration flow.
   Attempt increments are read-modify-write rather than an atomic counter. Expired OTP records
   are not garbage-collected automatically.
+
+## 16. Agent semantics (`raw_lib/agent`)
+
+`raw_lib/agent` is an optional, zero-dependency layer over RawQL. A model produces a typed
+`Query`; deterministic code validates, guards, executes, and audits it. The model never receives
+database credentials, driver handles, or permission to bypass the policy.
+
+### Tools
+
+`defineAgentTools({ db, policy, entities })` exposes four JSON-schema tools:
+
+| Tool              | Input                  | Behavior                                                         |
+| ----------------- | ---------------------- | ---------------------------------------------------------------- |
+| `describe_entity` | `{ entity }`           | Fields, relations, allowed operations; hides denied fields       |
+| `query`           | `{ query: Query }`     | Guarded RawQL execution, including approved writes               |
+| `aggregate`       | `{ entity, pipeline }` | Guarded pipeline execution                                       |
+| `explain`         | `{ query }`            | Normalized plan plus required adapter capabilities, no execution |
+
+Tool arguments may be objects or JSON strings. Malformed arguments count as invalid tool calls
+and are reported back to the model for repair.
+
+### Policy
+
+`normalizePolicy` applies these defaults:
+
+- `allowOps`: `list`, `get`, `count`, `aggregate` (read-only).
+- `allowEntities`: the configured entities, or `"*"` when none are configured.
+- `maxLimit` / `maxRows`: 50; `maxPipelineStages`: 6; `timeoutMs`: 5000.
+- `requireApproval`: `create`, `update`, `delete`.
+- `budget`: 8 tool calls and 20,000 tokens.
+
+Guards reject unknown operations, operators, stages, entities, and fields. Fields marked
+`sensitive` in an entity definition are denied. `denyFields` supports dotted prefixes and
+cannot overlap `redactFields`. List limits are clamped to `maxLimit`; pipeline depth is counted
+including nested `$lookup` pipelines. `$lookup.from` must be an allowed entity.
+
+`tenantScope(context)` is trusted server-side input. It is merged as `{ $and: [tenant, where] }`
+for filters and prepended as a `$match` stage for aggregations.
+
+### Loop
+
+`createDataAgent` runs `discover → plan → guard → execute → repair → answer`:
+
+1. The model receives the system prompt, entity summary, history, and tool definitions.
+2. Each tool call is executed by the guarded toolkit. Query and aggregate calls are checked by
+   the policy, executed through RawQL, row-capped, and redacted before the model sees them.
+3. `VALIDATION_FAILED`, `UNSUPPORTED_CAPABILITY`, `NOT_FOUND`, and `TIMEOUT` results may be
+   repaired up to `maxRepairs` (default 3). `FORBIDDEN` attempts are never executed.
+4. A final text turn produces an answer with citations. If every attempted operation was
+   forbidden, the outcome is `refused`; otherwise it is `answered`.
+5. A run that exceeds the step, tool-call, or token budget fails with `TIMEOUT` or
+   `RATE_LIMITED`.
+
+`agent.enabled = false` is a kill switch. `maxSteps` defaults to 8.
+
+### Redaction and audit
+
+`redactFields` masks matching fields (including dotted paths and joined `$lookup` rows) with
+`"[redacted]"` before tool results reach the model or the caller. Audit records store the run id,
+actor, tenant, question, proposed and guarded queries, policy decisions, row/time summary, token
+usage, model id, and outcome. Values for `email`, `phone`, `password`, tokens, secrets, OTP codes,
+email addresses, and phone numbers are scrubbed from audit queries. Audit failures never change
+the answer.
+
+### Models
+
+`AgentModel.generate({ system, messages, tools, signal })` returns `{ text?, toolCalls?, usage? }`.
+Built-ins:
+
+- `mockModel(steps)` — deterministic scripted turns for tests, CI, and demos.
+- `openai({ apiKey, model })` — Chat Completions function calling.
+- `anthropic({ apiKey, model })` — Messages tool use.
+- `ollama({ model })` — local `/api/chat` tool calling.
+
+All adapters use `fetch` and accept an injected implementation. They send `temperature: 0` by
+default for reproducible runs.
+
+### Evals
+
+`runEval({ agent | agentForCase, dataset, pricing? })` executes cases sequentially and reports:
+
+- execution accuracy and schema validity (malformed tool arguments; policy refusals do not count
+  as invalid),
+- unsafe-query rate over cases tagged `unsafe`, `injection`, `cross-tenant`, `pii`,
+  `destructive`, or `exfiltration`,
+- repair rate (1 when no repair was needed),
+- refusal rate, p50/p95 latency, token totals, and optional estimated cost.
+
+Query comparison normalizes shorthand equality (`{ field: value }` vs `{ field: { eq: value } }`),
+sort object/array shapes, `$and`/`$or` order, and default page limits. Result cases support
+`count`, `rows`, `minRows`, `maxRows`, `ids`, `contains`, `equals`, and scalar field invariants.
+
+### Limitations
+
+There is no streaming API, LLM-as-judge faithfulness metric, hosted key, or automatic schema
+discovery beyond configured fields and a one-row sample. Tool-call budgets are per run, not per
+actor. Audit retention and rotation are the application's responsibility.
